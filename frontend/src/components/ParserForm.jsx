@@ -26,7 +26,8 @@ const ParserForm = ({ onStart, onSuccess, onStreamItem, onStreamComplete, onErro
 
     const startSingleParse = async (videoUrl) => {
         try {
-            const res = await fetch('/api/v1/parse', {
+            const apiBase = import.meta.env.VITE_API_BASE || '';
+            const res = await fetch(`${apiBase}/api/v1/parse`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ video_url: videoUrl })
@@ -48,7 +49,8 @@ const ParserForm = ({ onStart, onSuccess, onStreamItem, onStreamComplete, onErro
             eventSourceRef.current.close();
         }
 
-        const sseUrl = `/api/v1/parse-stream?video_url=${encodeURIComponent(videoUrl)}`;
+        const apiBase = import.meta.env.VITE_API_BASE || '';
+        const sseUrl = `${apiBase}/api/v1/parse-stream?video_url=${encodeURIComponent(videoUrl)}`;
         const es = new EventSource(sseUrl);
         eventSourceRef.current = es;
 

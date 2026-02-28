@@ -55,22 +55,23 @@ Access the app at `http://localhost:8000`.
 
 ## 🌐 Deployment
 
-### GitHub Container Registry (GHCR)
+### Frontend (GitHub Pages)
 
-This project includes a GitHub Actions workflow that automatically builds and pushes the Docker image to GHCR on every push to `main`.
+The frontend is automatically deployed to **GitHub Pages** via GitHub Actions.
 
-1. **Pull and Run**:
-   ```bash
-   docker pull ghcr.io/cipfz/youtobe-parser:main
-   docker run -d -p 8000:8000 ghcr.io/cipfz/youtobe-parser:main
-   ```
+- **URL**: `https://CIPFZ.github.io/youtobe-parser/` (Once the Action completes)
+- **Configuration**: If you host the backend on a different domain, set the `VITE_API_BASE` environment variable in the GitHub Action or as a secret.
 
-### Direct Deployment (Recommended)
+### Backend (Required for Parsing)
 
-Since this is a full-stack application requiring a Python environment and `ffmpeg`, we recommend the following platforms for "direct from GitHub" deployment:
+Since GitHub Pages is static-only, the Python backend must be hosted separately.
 
-- **[Render](https://render.com/)**: Connect your GitHub repo, select "Web Service", and it will automatically detect the `Dockerfile`.
-- **[Railway](https://railway.app/)**: Connect your GitHub repo and Railway will handle the Docker build and deployment automatically.
+- **[Render](https://render.com/) / [Railway](https://railway.app/)**: Connect your GitHub repo and deploy using the `Dockerfile`.
+- **Manual**:
+  ```bash
+  docker pull ghcr.io/cipfz/youtobe-parser:main
+  docker run -d -p 8000:8000 ghcr.io/cipfz/youtobe-parser:main
+  ```
 
 ## 📄 License
 
