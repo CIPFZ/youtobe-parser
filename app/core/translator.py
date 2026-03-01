@@ -242,12 +242,17 @@ async def translate_subtitle(path: str, task_id: str) -> None:
             
         ass_abs_path = os.path.abspath(out_filepath)
 
-        # 6. Update task with file path
+        # 6. Update task with file metadata
         await task_store.update_task(
             task_id,
             status="completed",
             progress=100.0,
-            result=ass_abs_path
+            result={
+                "output_path": ass_abs_path,
+                "output_name": out_filename,
+                "source_path": path,
+                "format": "ass",
+            },
         )
         logger.info("Translation task %s completed successfully. Saved to: %s", task_id, ass_abs_path)
 
