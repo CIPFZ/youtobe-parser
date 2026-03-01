@@ -46,7 +46,7 @@ async def fetch_po_token(video_id: str = "") -> Optional[POToken]:
         payload["video_id"] = video_id
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT, trust_env=False) as client:
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()
@@ -64,9 +64,12 @@ async def fetch_po_token(video_id: str = "") -> Optional[POToken]:
     except httpx.ConnectError:
         logger.warning("PO Token provider unreachable at %s — proceeding without token", url)
         return None
+    except httpx.ReadTimeout:
+        logger.warning("PO Token provider timeout at %s — proceeding without token", url)
+        return None
     except httpx.HTTPStatusError as exc:
         logger.warning("PO Token provider returned %s — proceeding without token", exc.response.status_code)
         return None
-    except Exception:
-        logger.exception("Unexpected error fetching PO token")
+    except Exception as exc:
+        logger.warning("Unexpected error fetching PO token: %s", exc)
         return None
