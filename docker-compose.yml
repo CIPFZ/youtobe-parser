@@ -12,6 +12,7 @@ services:
       dockerfile: Dockerfile
     container_name: ytparser-app
     restart: unless-stopped
+    user: "${UID:-1000}:${GID:-1000}"
     env_file:
       - .env
     environment:
@@ -20,8 +21,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./downloads:/app/downloads
-      - ./secrets:/app/secrets
+      - ./data/downloads:/app/downloads
+      - ./data/secrets:/app/secrets
     depends_on:
       redis:
         condition: service_healthy

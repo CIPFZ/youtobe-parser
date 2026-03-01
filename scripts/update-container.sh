@@ -41,6 +41,10 @@ fi
 
 cd "${REPO_DIR}"
 
+
+# Pre-create bind-mount directories as current user to avoid root-owned auto-created paths
+mkdir -p "${REPO_DIR}/data/downloads" "${REPO_DIR}/data/secrets" "${REPO_DIR}/data/redis"
+
 if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
   echo "[INFO] Logging into GHCR as ${GHCR_USERNAME}"
   echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
