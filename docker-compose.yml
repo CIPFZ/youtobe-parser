@@ -1,21 +1,62 @@
-# ──────────────────────────────────────────────────
-# YouTube Parser — Docker Compose
-# ──────────────────────────────────────────────────
-# Start PO Token Provider:
-#   docker compose up pot-provider -d
+# YouTube Parser — docker compose
+# Architecture:
+# - app: all-in-one container (FastAPI API + built frontend static files)
+# - redis: shared generic Redis for task metadata
+# Optional:
+# - enable `pot` profile to run bundled yt-dlp PO token provider
 
 services:
-  # PO Token Provider – generates YouTube Proof-of-Origin tokens
-  # to bypass bot verification. Exposes HTTP API on port 4416.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ytparser-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - PO_TOKEN_SERVER=${PO_TOKEN_SERVER:-http://pot-provider:4416}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./downloads:/app/downloads
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: ytparser-redis
+    restart: unless-stopped
+    # 建议在 command 中增加 maxmemory 限制（通常设为容器限制的 80% 左右）
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "400mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    # --- 新增资源限制配置 ---
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'        # 限制最多使用 0.5 核 CPU
+          memory: 512M        # 限制最多使用 512MB 内存（硬限制）
+        reservations:
+          cpus: '0.25'        # 预留 0.25 核 CPU（软限制）
+          memory: 256M        # 预留 256MB 内存
+    # -----------------------
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   pot-provider:
     image: brainicism/bgutil-ytdlp-pot-provider:latest
     container_name: ytparser-pot-provider
     restart: unless-stopped
-    ports:
-      - "4416:4416"
+    profiles: ["pot"]
     environment:
-      # Pass proxy to the token provider if needed
+      - TOKEN_TIMEOUT=15000
       - http_proxy=${GLOBAL_PROXY:-}
       - https_proxy=${GLOBAL_PROXY:-}
-      # Token generation timeout (ms)
-      - TOKEN_TIMEOUT=15000
