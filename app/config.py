@@ -13,10 +13,10 @@ class Settings(BaseSettings):
     # PO Token Provider (Docker HTTP service)
     po_token_server: str = Field(default="http://localhost:4416", description="PO Token provider URL")
 
-    # LLM Translation API Setup
-    llm_api_key: str = Field(default="ak_1Wa63Y8MS3Ux3a08ge5oY9GL7242x", description="OpenAI format API key")
-    llm_base_url: str = Field(default="https://api.longcat.chat/openai/v1", description="OpenAI base URL")
-    llm_model: str = Field(default="LongCat-Flash-Chat", description="LLM default model")
+    # LLM Translation API Setup (OpenAI-compatible)
+    openai_api_key: str = Field(default="", description="OpenAI-compatible API key")
+    openai_base_url: str = Field(default="https://api.openai.com/v1", description="OpenAI-compatible base URL")
+    openai_model: str = Field(default="gpt-4o-mini", description="LLM model used for subtitle translation")
 
     # Concurrency
     max_concurrent_downloads: int = Field(default=3, description="Max simultaneous yt-dlp tasks")
