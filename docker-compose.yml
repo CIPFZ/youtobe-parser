@@ -59,6 +59,8 @@ services:
     container_name: ytparser-pot-provider
     restart: unless-stopped
     profiles: ["pot"]
+    ports:
+      - "4416:4416"
     environment:
       - TOKEN_TIMEOUT=15000
       - http_proxy=${POT_PROXY:-}

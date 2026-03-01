@@ -204,3 +204,10 @@ bash scripts/update-container.sh
 
 
 > If pot-provider is slow to mint token, increase `PO_TOKEN_TIMEOUT_SECONDS` (e.g. 45~90).
+
+
+For local debugging, pot-provider is exposed on host port `4416`, so you can test it with:
+
+```bash
+curl http://127.0.0.1:4416/health
+```
