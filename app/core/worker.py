@@ -7,6 +7,7 @@ import functools
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 import yt_dlp
@@ -90,8 +91,9 @@ def _build_ydl_opts(
         opts["proxy"] = settings.global_proxy
 
     # Optional YouTube cookies (Netscape format)
-    if settings.youtube_cookie_file and os.path.exists(settings.youtube_cookie_file):
-        opts["cookiefile"] = settings.youtube_cookie_file
+    cookie_file = _resolve_cookie_file()
+    if cookie_file:
+        opts["cookiefile"] = cookie_file
 
     # PO Token injection from HTTP Provider
     if po_token:
@@ -102,6 +104,42 @@ def _build_ydl_opts(
         logger.info("PO Token injected into yt-dlp extractor args")
 
     return opts
+
+
+def _resolve_cookie_file() -> str:
+    """Resolve an existing cookie file path for yt-dlp and emit diagnostic logs."""
+    configured = (settings.youtube_cookie_file or "").strip()
+    if configured:
+        configured_path = Path(configured)
+        if configured_path.exists() and configured_path.is_file():
+            logger.info("Using configured YouTube cookie file: %s", configured_path)
+            return str(configured_path)
+        logger.warning("Configured YOUTUBE_COOKIE_FILE not found or not a file: %s", configured_path)
+
+    # Default/auto-discovery candidates inside container mounts
+    search_roots = [Path('/app/secrets'), Path('/app/secrents')]
+    preferred_names = ['youtube_cookies.txt', 'cookies.txt', 'youtube.txt']
+
+    for root in search_roots:
+        for name in preferred_names:
+            path = root / name
+            if path.exists() and path.is_file():
+                logger.info("Using discovered YouTube cookie file: %s", path)
+                return str(path)
+
+    for root in search_roots:
+        if root.exists() and root.is_dir():
+            for path in sorted(root.iterdir()):
+                if path.is_file() and path.suffix.lower() in {'.txt', '.cookies', '.cookie'}:
+                    logger.info("Using discovered YouTube cookie file: %s", path)
+                    return str(path)
+
+    # Helpful typo hint for common misspelling
+    if Path('/app/secrents').exists() and not Path('/app/secrets').exists():
+        logger.warning("Detected /app/secrents but /app/secrets is missing. Did you mean 'secrets'?")
+
+    logger.info("No usable YouTube cookie file found; continuing without cookies")
+    return ""
 
 
 def _extract_sync(url: str, opts: dict[str, Any]) -> dict[str, Any]:
@@ -199,7 +237,12 @@ async def analyze_video(url: str, task_id: str) -> None:
         logger.exception("Task %s failed", task_id)
         err_text = str(exc)
         if "Sign in to confirm you’re not a bot" in err_text or "Sign in to confirm you're not a bot" in err_text:
-            err_text += " | Hint: configure YOUTUBE_COOKIE_FILE with exported YouTube cookies (Netscape format)."
+            configured_cookie = (settings.youtube_cookie_file or '').strip()
+            err_text += (
+                " | Hint: configure YOUTUBE_COOKIE_FILE with exported YouTube cookies (Netscape format)."
+                + (f" Current YOUTUBE_COOKIE_FILE={configured_cookie!r}." if configured_cookie else " YOUTUBE_COOKIE_FILE is empty.")
+                + " In Docker compose, host ./data/secrets is mounted to /app/secrets."
+            )
         await task_store.update_task(
             task_id,
             status="failed",
