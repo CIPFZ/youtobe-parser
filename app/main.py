@@ -53,7 +53,8 @@ if frontend_dist.exists():
     app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="assets")
 
 
-if __name__ == "__main__":
+def serve() -> None:
+    """Console entrypoint for local/dev run via `python -m` or script."""
     import uvicorn
 
     uvicorn.run(
@@ -62,3 +63,7 @@ if __name__ == "__main__":
         port=settings.port,
         reload=True,
     )
+
+
+if __name__ == "__main__":
+    serve()

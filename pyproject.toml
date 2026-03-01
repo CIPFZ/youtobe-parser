@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "youtobe-parser"
 version = "0.1.0"
@@ -15,4 +19,8 @@ dependencies = [
 ]
 
 [project.scripts]
-serve = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+serve = "app.main:serve"
+
+[tool.setuptools.packages.find]
+include = ["app", "app.*"]
+exclude = ["frontend", "frontend.*"]
