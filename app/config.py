@@ -13,10 +13,20 @@ class Settings(BaseSettings):
     # PO Token Provider (Docker HTTP service)
     po_token_server: str = Field(default="http://localhost:4416", description="PO Token provider URL")
 
-    # LLM Translation API Setup
-    llm_api_key: str = Field(default="ak_1Wa63Y8MS3Ux3a08ge5oY9GL7242x", description="OpenAI format API key")
-    llm_base_url: str = Field(default="https://api.longcat.chat/openai/v1", description="OpenAI base URL")
-    llm_model: str = Field(default="LongCat-Flash-Chat", description="LLM default model")
+    # LLM Translation API Setup (OpenAI-compatible)
+    openai_api_key: str = Field(default="", description="OpenAI-compatible API key")
+    openai_base_url: str = Field(default="https://api.openai.com/v1", description="OpenAI-compatible base URL")
+    openai_model: str = Field(default="gpt-4o-mini", description="LLM model used for subtitle translation")
+
+    # PO token provider
+    po_token_timeout_seconds: float = Field(default=45.0, description="Timeout in seconds for PO token provider requests")
+
+    # Task Store
+    redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL for task status storage")
+    task_ttl_seconds: int = Field(default=86400, description="How long completed/failed task metadata is kept in Redis")
+
+    # Networking fallback
+    retry_without_proxy_on_refused: bool = Field(default=True, description="Retry yt-dlp once without proxy when proxy is refused")
 
     # Concurrency
     max_concurrent_downloads: int = Field(default=3, description="Max simultaneous yt-dlp tasks")
