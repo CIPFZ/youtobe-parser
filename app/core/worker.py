@@ -148,6 +148,8 @@ async def analyze_video(url: str, task_id: str) -> None:
 
         await task_store.update_task(task_id, progress=70.0)
 
+        await task_store.update_task(task_id, progress=70.0)
+
         # Parse formats
         raw_formats: list[dict[str, Any]] = info.get("formats") or []
         formats: list[VideoFormat] = []
