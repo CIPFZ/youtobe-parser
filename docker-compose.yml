@@ -3,7 +3,7 @@
 # - app: all-in-one container (FastAPI API + built frontend static files)
 # - redis: shared generic Redis for task metadata
 # Optional:
-# - pot-provider can be external; set PO_TOKEN_SERVER accordingly in .env
+# - enable `pot` profile to run bundled yt-dlp PO token provider
 
 services:
   app:
@@ -16,7 +16,7 @@ services:
       - .env
     environment:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - PO_TOKEN_SERVER=${PO_TOKEN_SERVER:-}
+      - PO_TOKEN_SERVER=${PO_TOKEN_SERVER:-http://pot-provider:4416}
     ports:
       - "8000:8000"
     volumes:
@@ -50,3 +50,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  pot-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: ytparser-pot-provider
+    restart: unless-stopped
+    profiles: ["pot"]
+    environment:
+      - TOKEN_TIMEOUT=15000
+      - http_proxy=${GLOBAL_PROXY:-}
+      - https_proxy=${GLOBAL_PROXY:-}

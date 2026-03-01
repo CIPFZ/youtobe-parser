@@ -42,3 +42,12 @@ docker compose --env-file .env \
   -f docker-compose.yml -f docker-compose.image.yml \
   up -d --pull always --remove-orphans
 ```
+
+
+## 5) Optional: enable built-in POT provider
+
+```bash
+docker compose --profile pot up -d
+```
+
+When profile `pot` is enabled, default `PO_TOKEN_SERVER` can be `http://pot-provider:4416`.

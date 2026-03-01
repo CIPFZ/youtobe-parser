@@ -54,9 +54,17 @@ cp .env.example .env
 - `OPENAI_BASE_URL`：OpenAI 兼容网关地址
 - `OPENAI_MODEL`：模型名
 - `REDIS_URL`：默认 `redis://redis:6379/0`
-- `PO_TOKEN_SERVER`：可选，外部 provider 地址
+- `PO_TOKEN_SERVER`：默认内置 `pot-provider`，也可改成外部 provider 地址
 
 ### 2) 启动服务
+
+```bash
+docker compose --profile pot up -d --build
+```
+
+
+
+如果你不需要内置 POT 服务，也可以只启动默认服务并把 `PO_TOKEN_SERVER` 指向外部地址：
 
 ```bash
 docker compose up -d --build
