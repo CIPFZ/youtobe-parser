@@ -57,4 +57,27 @@ APP_IMAGE="${APP_IMAGE}" docker compose \
 echo "[INFO] Cleaning old dangling images"
 docker image prune -f >/dev/null 2>&1 || true
 
+
+
+echo "[INFO] Waiting for app container to become healthy/running"
+APP_CID="$(APP_IMAGE="${APP_IMAGE}" docker compose --env-file "${ENV_FILE}" -f docker-compose.yml -f docker-compose.image.yml ps -q app)"
+if [ -n "${APP_CID}" ]; then
+  for _ in $(seq 1 20); do
+    STATUS="$(docker inspect -f '{{.State.Status}}' "${APP_CID}" 2>/dev/null || true)"
+    if [ "${STATUS}" = "running" ]; then
+      echo "[INFO] app container is running"
+      break
+    fi
+    sleep 2
+  done
+
+  STATUS="$(docker inspect -f '{{.State.Status}}' "${APP_CID}" 2>/dev/null || true)"
+  if [ "${STATUS}" != "running" ]; then
+    echo "[ERROR] app container failed to stay running (status=${STATUS})" >&2
+    echo "[INFO] Recent app logs:" >&2
+    docker logs --tail 120 "${APP_CID}" >&2 || true
+    exit 1
+  fi
+fi
+
 echo "[DONE] Update completed"

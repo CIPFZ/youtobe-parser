@@ -103,16 +103,21 @@ class RedisTaskStore(BaseTaskStore):
         await self._redis.set(key, json.dumps(data), ex=self._ttl_seconds)
 
 
-async def _build_task_store() -> BaseTaskStore:
-    """Build Redis task store; fallback to in-memory when Redis is unavailable."""
+def _build_task_store_sync() -> BaseTaskStore:
+    """Build task store without `asyncio.run()` to avoid event-loop conflicts."""
+    if Redis is None:
+        logger.warning("redis package unavailable, using in-memory task store")
+        return InMemoryTaskStore()
+
     try:
         store = RedisTaskStore(settings.redis_url, settings.task_ttl_seconds)
-        await store._redis.ping()
-        logger.info("TaskStore initialized with Redis: %s", settings.redis_url)
+        logger.info("TaskStore configured with Redis: %s", settings.redis_url)
         return store
     except Exception as exc:
-        logger.warning("Redis unavailable (%s), fallback to in-memory task store", exc)
+        logger.warning("Redis task store init failed (%s), fallback to in-memory", exc)
         return InMemoryTaskStore()
 
 
-task_store: BaseTaskStore = asyncio.run(_build_task_store())
+# Singleton
+# NOTE: do not call asyncio.run() here; uvicorn may import modules within an active loop.
+task_store: BaseTaskStore = _build_task_store_sync()
