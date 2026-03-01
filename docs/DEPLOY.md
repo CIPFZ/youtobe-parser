@@ -66,3 +66,6 @@ For local debugging, pot-provider is exposed on host port `4416`, so you can tes
 ```bash
 curl http://127.0.0.1:4416/health
 ```
+
+
+If YouTube still returns "Sign in to confirm you're not a bot", provide exported cookies via `YOUTUBE_COOKIE_FILE` (Netscape format).

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+import os
 import re
 from typing import Any
 
@@ -87,6 +88,10 @@ def _build_ydl_opts(
     # Proxy
     if use_proxy and settings.global_proxy:
         opts["proxy"] = settings.global_proxy
+
+    # Optional YouTube cookies (Netscape format)
+    if settings.youtube_cookie_file and os.path.exists(settings.youtube_cookie_file):
+        opts["cookiefile"] = settings.youtube_cookie_file
 
     # PO Token injection from HTTP Provider
     if po_token:
@@ -192,8 +197,11 @@ async def analyze_video(url: str, task_id: str) -> None:
 
     except Exception as exc:
         logger.exception("Task %s failed", task_id)
+        err_text = str(exc)
+        if "Sign in to confirm you’re not a bot" in err_text or "Sign in to confirm you're not a bot" in err_text:
+            err_text += " | Hint: configure YOUTUBE_COOKIE_FILE with exported YouTube cookies (Netscape format)."
         await task_store.update_task(
             task_id,
             status="failed",
-            error=str(exc),
+            error=err_text,
         )
