@@ -1,0 +1,21 @@
+# ──────────────────────────────────────────────────
+# YouTube Parser — Docker Compose
+# ──────────────────────────────────────────────────
+# Start PO Token Provider:
+#   docker compose up pot-provider -d
+
+services:
+  # PO Token Provider – generates YouTube Proof-of-Origin tokens
+  # to bypass bot verification. Exposes HTTP API on port 4416.
+  pot-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: ytparser-pot-provider
+    restart: unless-stopped
+    ports:
+      - "4416:4416"
+    environment:
+      # Pass proxy to the token provider if needed
+      - http_proxy=${GLOBAL_PROXY:-}
+      - https_proxy=${GLOBAL_PROXY:-}
+      # Token generation timeout (ms)
+      - TOKEN_TIMEOUT=15000

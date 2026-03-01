@@ -1,0 +1,99 @@
+[Script Info]
+Title: Translated Subtitles
+ScriptType: v4.00+
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+PlayResX: 1920
+PlayResY: 1080
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,65,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,2,2,10,10,20,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:07.75,Default,,0,0,0,,好的，距离谷歌发布 Gemini 3 系列模型之一 Gemini Flash 已经过去 64 天多了，\N{\fs40\c&HCCCCCC&}Okay, so it's been over 64 days since Google released one of the Gemini 3 models and that was
+Dialogue: 0,0:00:07.75,0:00:14.32,Default,,0,0,0,,而距离他们发布 Gemini 3 Pro 大约也有 30 天了。也就是说，Gemini 3 发布至今\N{\fs40\c&HCCCCCC&}the Gemini Flash. And about 30 days before that they released Gemini 3 Pro. So we're coming up
+Dialogue: 0,0:00:14.32,0:00:21.35,Default,,0,0,0,,已经快 100 天了。在当今的人工智能生态系统中，这几乎相当于 100 年那么久。\N{\fs40\c&HCCCCCC&}on nearly 100 days of Gemini 3 being out. And you've got to think in the current AI
+Dialogue: 0,0:00:21.35,0:00:27.76,Default,,0,0,0,,所以今天，谷歌正式推出了 Gemini 3.1 Pro。在本视频中，我将带大家了解这个模型的一些更新内容。\N{\fs40\c&HCCCCCC&}sort of ecosystem that is the equivalent to like 100 years. So today Google is introducing
+Dialogue: 0,0:00:27.76,0:00:32.88,Default,,0,0,0,,简单聊聊它如何融入当前的发布节奏，并快速看看这个模型的实际能力——\N{\fs40\c&HCCCCCC&}Gemini 3.1 Pro. And in this video I'm going to go through some of the updates with this model.
+Dialogue: 0,0:00:32.88,0:00:36.80,Default,,0,0,0,,目前它已经开始逐步部署到大多数使用 Gemini 模型的谷歌应用中。\N{\fs40\c&HCCCCCC&}Talk a little bit about how this fits in with the release schedule. And we'll have a quick look at
+Dialogue: 0,0:00:36.80,0:00:42.80,Default,,0,0,0,,我们来看看官方博客文章，会发现一些有趣的信息。\N{\fs40\c&HCCCCCC&}what this model can actually do as it's now being rolled out to most of the Google apps that use
+Dialogue: 0,0:00:42.80,0:00:48.24,Default,,0,0,0,,首先，这个版本号是 3.1，本身就很有意思，对吧？\N{\fs40\c&HCCCCCC&}Gemini model. So if we come in and look at the blog post about this we can see some sort of
+Dialogue: 0,0:00:48.24,0:00:54.40,Default,,0,0,0,,因为 Gemini 之前从未有过 0.1 这样的版本，只有 0 或 0.5 这样的发布。\N{\fs40\c&HCCCCCC&}interesting things. So the first off just the fact this is a 3.1 as it is kind of interesting,
+Dialogue: 0,0:00:54.39,0:01:01.43,Default,,0,0,0,,这是首次出现 0.1 版本。我觉得这很耐人寻味，\N{\fs40\c&HCCCCCC&}right? Gemini has never had anything except sort of like a zero release or a 0.5 release.
+Dialogue: 0,0:01:01.43,0:01:07.03,Default,,0,0,0,,毕竟距离该模型的初版发布已经快 100 天了。\N{\fs40\c&HCCCCCC&}This is the first time we've seen a 0.1 release. I do think that's kind of interesting in the fact
+Dialogue: 0,0:01:07.03,0:01:15.12,Default,,0,0,0,,显然，在这段时间里，Gemini 深度思考模型取得了巨大进展，\N{\fs40\c&HCCCCCC&}that it is nearly 100 days since the first version of this model has come out. Clearly in that time
+Dialogue: 0,0:01:15.12,0:01:21.92,Default,,0,0,0,,而他们显然正在将这些理念和技术融入主力的 Pro 模型中。\N{\fs40\c&HCCCCCC&}they've made a lot of impact with the Gemini deep think models. And they are clearly taking some
+Dialogue: 0,0:01:21.92,0:01:27.43,Default,,0,0,0,,好，现在我们来看看基准测试数据。我认为关键不在于把它和其他模型对比，\N{\fs40\c&HCCCCCC&}of those ideas and some of that technology and putting it into the main pro model here.
+Dialogue: 0,0:01:27.43,0:01:33.76,Default,,0,0,0,,虽然他们确实拿它和 Sonnet 4.6、Opus 4.6 以及 GPT 系列做了比较。\N{\fs40\c&HCCCCCC&}Okay, so if we come in and look at the benchmarks here I think the real takeaway here is not
+Dialogue: 0,0:01:33.76,0:01:40.24,Default,,0,0,0,,真正重要的是和 Gemini 3 Pro 的对比，这样才看得出变化。\N{\fs40\c&HCCCCCC&}just comparing this to other models. So they certainly compare this to Sonnet 4.6 and Opus 4.6
+Dialogue: 0,0:01:40.24,0:01:47.12,Default,,0,0,0,,比如看“人类最终考试”（Humanity's Last Exam）这项测试，相比 Gemini 3 Pro 有巨大提升。\N{\fs40\c&HCCCCCC&}as well as the GPT models. But it's really comparing to Gemini 3 Pro that we can sort of see
+Dialogue: 0,0:01:47.20,0:01:54.64,Default,,0,0,0,,没错，它超过了 Sonnet 4.6，也超过了 Opus 4.6，\N{\fs40\c&HCCCCCC&}stuff. So if we look at, for example, the humanity's last exam, this is a huge bump over Gemini 3 Pro.
+Dialogue: 0,0:01:54.64,0:02:02.24,Default,,0,0,0,,但更值得关注的是它相对于 Gemini 3 Pro 的飞跃式进步。\N{\fs40\c&HCCCCCC&}Yes, it's more than Sonnet 4.6. Yes, it's more than Opus 4.6. But look at the bump that we're
+Dialogue: 0,0:02:02.24,0:02:10.48,Default,,0,0,0,,别忘了，这还只是一个 .1 版本！\N{\fs40\c&HCCCCCC&}seeing compared to Gemini 3 Pro. And don't forget this is just a .1 release, right? And I'd say the
+Dialogue: 0,0:02:10.48,0:02:16.08,Default,,0,0,0,,我认为主要原因在于——稍后我会展示一些例子——\N{\fs40\c&HCCCCCC&}main reason for that is like I'll show you in a second when we actually do some look at some examples
+Dialogue: 0,0:02:16.08,0:02:23.52,Default,,0,0,0,,它内置的“高思维模式”本质上就像是一个轻量版的深度思考模型。\N{\fs40\c&HCCCCCC&}that this thinking high mode in here really is like a deep think mini kind of thing that they've
+Dialogue: 0,0:02:23.52,0:02:33.04,Default,,0,0,0,,我们在 Arc AGI 测试中也能看到类似趋势：77% 对比 Gemini 3 Pro 的 31%。\N{\fs40\c&HCCCCCC&}got going on here. We can see this also when we look at like the Arc AGI. Arc AGI, 77% compared to 31%
+Dialogue: 0,0:02:33.04,0:02:38.96,Default,,0,0,0,,当然，Anthropic 的模型当时表现更好，\N{\fs40\c&HCCCCCC&}with Gemini 3 Pro. Obviously, you know, the anthropic models were doing a lot better than that.
+Dialogue: 0,0:02:38.96,0:02:45.28,Default,,0,0,0,,但谷歌可能根本没想过要用 Gemini 3 Pro 去优化这类任务。\N{\fs40\c&HCCCCCC&}Google probably hadn't really sort of even thought about optimizing for this maybe with Gemini 3 Pro.
+Dialogue: 0,0:02:45.28,0:02:50.31,Default,,0,0,0,,不过现在我们可以看到这里有了巨大飞跃。\N{\fs40\c&HCCCCCC&}But we can see that this has got a huge bump here. And while Google's not saying this sort of,
+Dialogue: 0,0:02:50.31,0:02:55.92,Default,,0,0,0,,虽然谷歌在博客里没明说，但这明显表明他们已经开始构建非常强大的\N{\fs40\c&HCCCCCC&}you know, in their blog post, this definitely looks like that they're starting to get really good
+Dialogue: 0,0:02:55.92,0:03:03.43,Default,,0,0,0,,强化学习（RL）训练环境，用于这类任务，从而带来更好的基准测试成绩。\N{\fs40\c&HCCCCCC&}RL environments for training these kinds of tasks, which then translate to better benchmarks.
+Dialogue: 0,0:03:03.43,0:03:09.03,Default,,0,0,0,,我们在其他需要 RL 环境的任务中也能看到这一点，\N{\fs40\c&HCCCCCC&}We see this also when we look at, you know, some of the other things which would have RL environments
+Dialogue: 0,0:03:09.12,0:03:15.51,Default,,0,0,0,,比如编码基准测试，或者像 MCP Atlas 这样的场景——你可以想象其中涉及代理式搜索等等。\N{\fs40\c&HCCCCCC&}like coding bench, like things like this MCP Atlas where you could imagine that you're doing that
+Dialogue: 0,0:03:15.51,0:03:21.35,Default,,0,0,0,,显然，不仅是基准测试在展示进步。\N{\fs40\c&HCCCCCC&}like the agentic search, et cetera. So clearly we're seeing, you know, just not just benchmarks
+Dialogue: 0,0:03:21.35,0:03:28.47,Default,,0,0,0,,我们也能看到，比如在生成设计内容方面，3.1 Pro 已经明显优于 3 Pro。\N{\fs40\c&HCCCCCC&}show this off. We can see here that, okay, you know, getting it to generate things for designs,
+Dialogue: 0,0:03:28.47,0:03:34.56,Default,,0,0,0,,这同样可以想象是通过高质量的 RL 环境实现的。\N{\fs40\c&HCCCCCC&}3.1 Pro is already looking a lot better than 3 Pro. Again, this is something that you could
+Dialogue: 0,0:03:34.56,0:03:40.87,Default,,0,0,0,,同样的情况也出现在图形设计、编码等相关领域——\N{\fs40\c&HCCCCCC&}imagine having been done with a really good RL environment. Same for sort of, you know,
+Dialogue: 0,0:03:40.87,0:03:46.24,Default,,0,0,0,,我们可以看到模型在这些方面确实进步了。\N{\fs40\c&HCCCCCC&}graphic designs on coding and stuff like that, we can see that, okay, the model's gotten better
+Dialogue: 0,0:03:46.24,0:03:51.59,Default,,0,0,0,,不过除此之外，谷歌其实没透露太多信息，对吧？\N{\fs40\c&HCCCCCC&}with those sorts of things. Now, apart from this Google's not actually saying a lot here, right?
+Dialogue: 0,0:03:51.59,0:03:56.87,Default,,0,0,0,,所以这就很有意思了：正如我前面所说，这是个 .1 版本。\N{\fs40\c&HCCCCCC&}So it is kind of interesting that like I said, this is a .1 release. Perhaps in the past,
+Dialogue: 0,0:03:56.87,0:04:03.92,Default,,0,0,0,,过去他们可能会直接说：“这是又一个新的 Gemini 3 Pro 预览版”，\N{\fs40\c&HCCCCCC&}they would have just basically said, well, here's another new Gemini 3 Pro preview. Like they did
+Dialogue: 0,0:04:03.92,0:04:09.68,Default,,0,0,0,,就像之前多次发布 2.5 预览版，直到最终推出正式版（GA）那样。\N{\fs40\c&HCCCCCC&}with say the 2.5 previews where they were multiple previews before we got to GA. It does seem
+Dialogue: 0,0:04:09.68,0:04:16.72,Default,,0,0,0,,但现在看来，他们不再只是简单地推出一个带新日期的预览版，\N{\fs40\c&HCCCCCC&}here now that rather than just have another rollout of a new dated preview with a newer date kind of
+Dialogue: 0,0:04:16.72,0:04:21.84,Default,,0,0,0,,而是决定将其命名为 Gemini 3.1 Pro。\N{\fs40\c&HCCCCCC&}thing, they've actually decided to call this Gemini 3.1 Pro. And those benchmarks, I think,
+Dialogue: 0,0:04:21.84,0:04:27.60,Default,,0,0,0,,而这些基准测试成绩，我认为确实证明了这一命名的合理性。\N{\fs40\c&HCCCCCC&}really do justify that. So let's jump into having a play with this and see how it performs.
+Dialogue: 0,0:04:27.60,0:04:32.56,Default,,0,0,0,,那我们现在就来实际体验一下，看看它的表现如何。\N{\fs40\c&HCCCCCC&}And I want to show you how you can actually take advantage of the different thinking levels
+Dialogue: 0,0:04:32.56,0:04:39.75,Default,,0,0,0,,我想向大家展示如何利用这个模型的不同思维层级——\N{\fs40\c&HCCCCCC&}that this model has so that it can go from, you know, very quick thinking right up to things where
+Dialogue: 0,0:04:39.75,0:04:47.04,Default,,0,0,0,,让它既能快速响应，也能在需要时花五分钟甚至更长时间给出完整答案。\N{\fs40\c&HCCCCCC&}you're looking at five minutes plus before you've got a full answer back. Okay, so to get started,
+Dialogue: 0,0:04:47.04,0:04:52.48,Default,,0,0,0,,好，开始之前，请先切换到最新模型。\N{\fs40\c&HCCCCCC&}you come over here and you'll basically just select the latest model. So if you don't see it,
+Dialogue: 0,0:04:52.48,0:04:57.84,Default,,0,0,0,,如果没看到，点击“全部”，它正在陆续推送中，你应该很快就能见到。\N{\fs40\c&HCCCCCC&}just click all, they're suddenly rolling it out. You should be able to see it pretty quickly in here.
+Dialogue: 0,0:04:58.40,0:05:03.04,Default,,0,0,0,,我先用一道国际数学奥林匹克竞赛题来测试。\N{\fs40\c&HCCCCCC&}So I'm going to start off with one of the questions from the international math
+Dialogue: 0,0:05:03.04,0:05:10.80,Default,,0,0,0,,去年我用深度思考模型运行这道题时，\N{\fs40\c&HCCCCCC&}Olympiad problem. Now this question, when I ran it last year with the deep think model, it was
+Dialogue: 0,0:05:10.80,0:05:16.48,Default,,0,0,0,,它虽然给出了正确答案，但花了很长时间——我记得大概是……\N{\fs40\c&HCCCCCC&}able to give us the correct answer, but it took a long time, right? I think it was from memory
+Dialogue: 0,0:05:16.48,0:05:22.72,Default,,0,0,0,,距离我们首次获得 token 已经过去了 17 分多钟。你可以看到，我们现在的设置是：\N{\fs40\c&HCCCCCC&}17 plus minutes before we were getting time to first token here. So you can see here we've got
+Dialogue: 0,0:05:22.72,0:05:28.88,Default,,0,0,0,,我把思考级别设置为“高”。你可以看到，它确实需要花一些时间才能得出答案。\N{\fs40\c&HCCCCCC&}this setup. I've got thinking level set to high. And we can see that it's definitely taking, you
+Dialogue: 0,0:05:28.88,0:05:34.56,Default,,0,0,0,,这主要是因为我们将思考级别设为了“高”。在 Gemini 3 Pro 的早期版本中，\N{\fs40\c&HCCCCCC&}know, time to get to, you know, to the answer. And this is partly because we've got the thinking level,
+Dialogue: 0,0:05:34.56,0:05:41.04,Default,,0,0,0,,你只能选择“低”或“高”两种模式。\N{\fs40\c&HCCCCCC&}you know, set to high with the previous version of Gemini 3 pro, you could only have low or high.
+Dialogue: 0,0:05:41.04,0:05:47.76,Default,,0,0,0,,但现在你可以选择“低”、“中”或“高”三种设置。你会注意到，在处理过程中，\N{\fs40\c&HCCCCCC&}Now you can have low medium or high as the setting in there. So you'll notice as it's going through
+Dialogue: 0,0:05:47.83,0:05:53.51,Default,,0,0,0,,我们光是思考就已经花了两分钟左右。但我们期望的答案基本上是 0、1 和 3。\N{\fs40\c&HCCCCCC&}this, we're already sort of two minutes in of thinking. But the answer we're looking for here
+Dialogue: 0,0:05:53.51,0:06:00.95,Default,,0,0,0,,让我们看看它最终能否得出正确答案。好的，我暂停了一下，\N{\fs40\c&HCCCCCC&}is basically 0, 1 and 3. So let's see if it's we're going to get the answer. Okay, so I paused it
+Dialogue: 0,0:06:00.95,0:06:06.31,Default,,0,0,0,,当时它还在处理中。最终它确实得出了正确答案，但花了\N{\fs40\c&HCCCCCC&}while it was actually going through. It did finally come to the right answer. It took, you know,
+Dialogue: 0,0:06:06.31,0:06:11.83,Default,,0,0,0,,超过八分钟才完成。这大约是 Deep Think 之前耗时的一半。\N{\fs40\c&HCCCCCC&}over eight minutes to get to this answer. That's roughly half of what deep think used to take.
+Dialogue: 0,0:06:11.83,0:06:16.15,Default,,0,0,0,,但这正体现了这个模型一个非常有趣的特点。\N{\fs40\c&HCCCCCC&}But this shows one of the things that is really kind of interesting with this model.
+Dialogue: 0,0:06:16.16,0:06:24.56,Default,,0,0,0,,也就是说，当你把思考级别设为“高”时，它的行为几乎就像是一个迷你版的 Gemini\N{\fs40\c&HCCCCCC&}And that's that if you have thinking set to high, this acts almost like a mini version of Gemini
+Dialogue: 0,0:06:24.56,0:06:28.72,Default,,0,0,0,,Deep Think。这也是他们强调的一点：这个模型现在\N{\fs40\c&HCCCCCC&}Deep Think. And this is one of the things that they're kind of emphasized that this model now
+Dialogue: 0,0:06:28.72,0:06:35.20,Default,,0,0,0,,已经从 Gemini Deep Think 的早期版本和最新版本中汲取了经验。\N{\fs40\c&HCCCCCC&}has taken sort of lessons from Gemini Deep Think, both the earlier versions and the more recent
+Dialogue: 0,0:06:35.20,0:06:43.04,Default,,0,0,0,,但与此同时，如果我将它设为“低”，那么它的思考速度应该会快得多。\N{\fs40\c&HCCCCCC&}versions. Now at the same time, if I set this to low, right, we should get something that the
+Dialogue: 0,0:06:43.04,0:06:49.20,Default,,0,0,0,,好的，虽然这次思考速度快了很多，但它实际上\N{\fs40\c&HCCCCCC&}thinking is much quicker on this. Okay, and so while the thinking was much faster here, it actually
+Dialogue: 0,0:06:49.20,0:06:55.36,Default,,0,0,0,,并没有得出正确答案。所以在处理不同任务时，你确实需要根据情况调整思考级别。\N{\fs40\c&HCCCCCC&}didn't get the correct answer, you know, in this case. So you do want to make use of the thinking
+Dialogue: 0,0:06:55.36,0:07:01.04,Default,,0,0,0,,另一个人们经常尝试的任务是创建 SVG 图像。这次我只是让它生成一张“骑着自行车的猫”的 SVG。\N{\fs40\c&HCCCCCC&}level when you're doing different tasks for this. So another task that people have been doing a lot
+Dialogue: 0,0:07:01.04,0:07:07.92,Default,,0,0,0,,如果我们渲染出来，你会发现，嗯，这也许不是世界上最可爱的猫，\N{\fs40\c&HCCCCCC&}is creating SVGs. And this one is I've just asked it to make me the SVG of a cat writing a bicycle.
+Dialogue: 0,0:07:07.92,0:07:14.08,Default,,0,0,0,,但效果还算不错。看起来猫还戴着围巾。\N{\fs40\c&HCCCCCC&}So if we render this out, you can see that, okay, yeah, it's perhaps not the best cat in the world,
+Dialogue: 0,0:07:14.08,0:07:18.96,Default,,0,0,0,,自行车也画得相当准确，甚至还有链条。\N{\fs40\c&HCCCCCC&}but it comes out, you know, quite good. It looks like the cat's wearing a scarf. We've got
+Dialogue: 0,0:07:18.96,0:07:23.92,Default,,0,0,0,,猫腿还踩在踏板上，这点做得挺到位的。\N{\fs40\c&HCCCCCC&}our bicycle, which looks pretty accurate. We've even got a chain. We've got the legs of the cat
+Dialogue: 0,0:07:23.92,0:07:28.72,Default,,0,0,0,,如果你想亲自体验这个模型，可以直接进入 AI Studio 免费试用，\N{\fs40\c&HCCCCCC&}actually on the pedals, which is kind of good in there. Okay, so if you want to play with the model
+Dialogue: 0,0:07:28.72,0:07:34.80,Default,,0,0,0,,尝试你自己的提示词。记住，最重要的是你要多尝试不同的\N{\fs40\c&HCCCCCC&}yourself, you can just come into AI Studio and try out the model for free and try out your own prompts
+Dialogue: 0,0:07:34.80,0:07:39.68,Default,,0,0,0,,思考级别。如果你设为“高”，它可能需要更长时间才能给出答案，\N{\fs40\c&HCCCCCC&}and sort of see, remember, the big thing here is you should be experimenting with the different
+Dialogue: 0,0:07:39.68,0:07:44.96,Default,,0,0,0,,但你会得到一个类似“Gemini Deepink Mini”的效果。\N{\fs40\c&HCCCCCC&}thinking levels. If you've got it set to high, it can take a lot longer to give you an answer.
+Dialogue: 0,0:07:45.60,0:07:52.16,Default,,0,0,0,,该模型正在逐步推送给 Gemini Pro 用户，目前 Google Cloud 上已经可以使用。\N{\fs40\c&HCCCCCC&}But you're definitely getting sort of like a Gemini Deepink Mini out of this model when you do that.
+Dialogue: 0,0:07:52.16,0:07:58.56,Default,,0,0,0,,如果你想在那里试用，当然也可以。虽然这次更新只是一个小版本（0.1），\N{\fs40\c&HCCCCCC&}So the model is rolling out to the Gemini Pro plan. It's already out on Google Cloud. If you want
+Dialogue: 0,0:07:58.56,0:08:04.00,Default,,0,0,0,,但它实际上是一次重大升级，让模型重新回到了与 Opus 4.6 和最新 GPT 模型\N{\fs40\c&HCCCCCC&}to try it out there, you can certainly use it there as well. And I'd say that while this is an
+Dialogue: 0,0:08:04.00,0:08:10.56,Default,,0,0,0,,相竞争的行列。就像三个月前 3 Pro 推动了专有模型和开源模型\N{\fs40\c&HCCCCCC&}incremental sort of point one step, it is a big update that basically gets the model back into
+Dialogue: 0,0:08:10.56,0:08:18.16,Default,,0,0,0,,的飞速发展一样，现在 Gemini 3.1 Pro 正式发布并显著提升了性能，\N{\fs40\c&HCCCCCC&}the same sort of competitive area as Opus 4.6 and the latest GPT models as well. So just as
+Dialogue: 0,0:08:18.16,0:08:25.19,Default,,0,0,0,,不禁让人好奇其他模型是否会推出新版本来追赶。\N{\fs40\c&HCCCCCC&}three Pro spurred a whole new sort of takeoff in both the sort of proprietary models and also the
+Dialogue: 0,0:08:25.19,0:08:32.08,Default,,0,0,0,,好了，欢迎在评论区告诉我你的想法。我们下期视频再见，拜拜！\N{\fs40\c&HCCCCCC&}open model weights over the past three months, you've got to wonder now that Gemini 3.1 Pro is out
+Dialogue: 0,0:08:32.16,0:08:37.68,Default,,0,0,0,,and actually has seriously bumped its performance, I'll be going to see other models release new\N{\fs40\c&HCCCCCC&}and actually has seriously bumped its performance, I'll be going to see other models release new
+Dialogue: 0,0:08:37.68,0:08:42.00,Default,,0,0,0,,versions to try and catch up. Anyway, let me know what you think in the comments and as always,\N{\fs40\c&HCCCCCC&}versions to try and catch up. Anyway, let me know what you think in the comments and as always,
+Dialogue: 0,0:08:42.00,0:08:44.63,Default,,0,0,0,,I'll talk to you in the next video. Bye for now.\N{\fs40\c&HCCCCCC&}I'll talk to you in the next video. Bye for now.

@@ -1,92 +1,83 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from app.services.parser import parse_video_url, ParseError
-import asyncio
+"""API routes for the YouTube parser service."""
+
+from __future__ import annotations
+
 import logging
 
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+
+from app.core.task_store import task_store
+from app.core.worker import analyze_video
+from app.core.translator import translate_subtitle
+from app.models.schemas import (
+    AnalyzeRequest,
+    TranslateRequest,
+    TaskResponse,
+    TaskStatusResponse,
+    VideoInfo,
+)
+
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(prefix="/v1", tags=["parser"])
 
 
-class ParseRequest(BaseModel):
-    video_url: str
+# ── POST /v1/analyze ─────────────────────────────────────
 
+@router.post("/analyze", response_model=TaskResponse)
+async def create_analyze_task(
+    body: AnalyzeRequest,
+    background_tasks: BackgroundTasks,
+) -> TaskResponse:
+    """Submit a YouTube URL for analysis.
 
-@router.post("/parse")
-async def parse_url(req: ParseRequest):
+    Returns a *task_id* immediately – poll ``GET /v1/tasks/{task_id}``
+    for progress and results.
     """
-    Parse a YouTube URL and return video metadata + available format direct links.
+    task_id = await task_store.create_task()
+    background_tasks.add_task(analyze_video, body.url, task_id)
+    logger.info("Created task %s for URL: %s", task_id, body.url)
+    return TaskResponse(task_id=task_id, status="pending")
+
+
+# ── POST /v1/translate ───────────────────────────────────
+
+@router.post("/translate", response_model=TaskResponse)
+async def create_translate_task(
+    body: TranslateRequest,
+    background_tasks: BackgroundTasks,
+) -> TaskResponse:
+    """Submit an SRT/VTT URL for English-to-Chinese translation to ASS format.
+
+    Returns a *task_id* immediately – poll ``GET /v1/tasks/{task_id}``
+    for progress and results. The final ASS content will be in the 'result' field.
     """
-    if not req.video_url.strip():
-        raise HTTPException(status_code=400, detail="video_url is required")
-
-    try:
-        result = await asyncio.to_thread(parse_video_url, req.video_url.strip())
-        return result
-    except asyncio.CancelledError:
-        logger.warning(f"Request cancelled for {req.video_url} (server shutdown or client disconnect)")
-        from fastapi import Response
-        return Response(status_code=499)
-    except ParseError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+    task_id = await task_store.create_task()
+    background_tasks.add_task(translate_subtitle, body.path, task_id)
+    logger.info("Created translation task %s for path: %s", task_id, body.path)
+    return TaskResponse(task_id=task_id, status="pending")
 
 
-@router.get("/parse-stream")
-async def parse_url_stream(video_url: str):
-    """
-    Stream video parsing results (useful for playlists).
-    Server-Sent Events (SSE) endpoint.
-    """
-    if not video_url or not video_url.strip():
-        raise HTTPException(status_code=400, detail="video_url is required")
+# ── GET /v1/tasks/{task_id} ──────────────────────────────
 
-    from app.services.parser import parse_video_url_stream
-    from sse_starlette.sse import EventSourceResponse
+@router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
+async def get_task_status(task_id: str) -> TaskStatusResponse:
+    """Poll the status of an analysis task."""
+    task = await task_store.get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
 
-    async def event_generator():
-        try:
-            async for data in parse_video_url_stream(video_url.strip()):
-                yield {"data": data}
-        except asyncio.CancelledError:
-            logger.warning(f"SSE stream cancelled for {video_url}")
-            return
-        except Exception as e:
-            logger.error(f"SSE stream error for {video_url}: {e}")
-            yield {"data": f'{{"error": "{str(e)}"}}'}
+    result = task.get("result")
+    
+    # If it's a dict (VideoInfo), parse it. If it's a string (ASS), keep it as is.
+    if isinstance(result, dict):
+        result_data = VideoInfo(**result)
+    else:
+        result_data = result
 
-    return EventSourceResponse(event_generator())
-
-
-class ProxyRequest(BaseModel):
-    proxy_url: str
-
-
-@router.get("/proxies")
-async def get_proxies():
-    from app.services.proxy_manager import proxy_manager
-    return {"proxies": proxy_manager.get_all_proxies()}
-
-
-@router.post("/proxies")
-async def add_proxy(req: ProxyRequest):
-    from app.services.proxy_manager import proxy_manager
-    if not req.proxy_url.strip():
-        raise HTTPException(status_code=400, detail="proxy_url is required")
-    added = proxy_manager.add_proxy(req.proxy_url)
-    if not added:
-        raise HTTPException(status_code=400, detail="Proxy already exists or is empty")
-    return {"status": "success", "proxy": req.proxy_url}
-
-
-@router.delete("/proxies")
-async def remove_proxy(req: ProxyRequest):
-    from app.services.proxy_manager import proxy_manager
-    if not req.proxy_url.strip():
-        raise HTTPException(status_code=400, detail="proxy_url is required")
-    removed = proxy_manager.remove_proxy(req.proxy_url)
-    if not removed:
-        raise HTTPException(status_code=404, detail="Proxy not found")
-    return {"status": "success", "proxy": req.proxy_url}
+    return TaskStatusResponse(
+        task_id=task["task_id"],
+        status=task["status"],
+        progress=task.get("progress", 0.0),
+        result=result_data,
+        error=task.get("error"),
+    )

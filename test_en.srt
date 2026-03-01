@@ -1,0 +1,340 @@
+1
+00:00:00,000 --> 00:00:07,759
+Okay, so it's been over 64 days since Google released one of the Gemini 3 models and that was
+
+2
+00:00:07,759 --> 00:00:14,320
+the Gemini Flash. And about 30 days before that they released Gemini 3 Pro. So we're coming up
+
+3
+00:00:14,320 --> 00:00:21,359
+on nearly 100 days of Gemini 3 being out. And you've got to think in the current AI
+
+4
+00:00:21,359 --> 00:00:27,760
+sort of ecosystem that is the equivalent to like 100 years. So today Google is introducing
+
+5
+00:00:27,760 --> 00:00:32,880
+Gemini 3.1 Pro. And in this video I'm going to go through some of the updates with this model.
+
+6
+00:00:32,880 --> 00:00:36,800
+Talk a little bit about how this fits in with the release schedule. And we'll have a quick look at
+
+7
+00:00:36,800 --> 00:00:42,800
+what this model can actually do as it's now being rolled out to most of the Google apps that use
+
+8
+00:00:42,800 --> 00:00:48,240
+Gemini model. So if we come in and look at the blog post about this we can see some sort of
+
+9
+00:00:48,240 --> 00:00:54,400
+interesting things. So the first off just the fact this is a 3.1 as it is kind of interesting,
+
+10
+00:00:54,399 --> 00:01:01,439
+right? Gemini has never had anything except sort of like a zero release or a 0.5 release.
+
+11
+00:01:01,439 --> 00:01:07,039
+This is the first time we've seen a 0.1 release. I do think that's kind of interesting in the fact
+
+12
+00:01:07,039 --> 00:01:15,120
+that it is nearly 100 days since the first version of this model has come out. Clearly in that time
+
+13
+00:01:15,120 --> 00:01:21,920
+they've made a lot of impact with the Gemini deep think models. And they are clearly taking some
+
+14
+00:01:21,920 --> 00:01:27,439
+of those ideas and some of that technology and putting it into the main pro model here.
+
+15
+00:01:27,439 --> 00:01:33,760
+Okay, so if we come in and look at the benchmarks here I think the real takeaway here is not
+
+16
+00:01:33,760 --> 00:01:40,240
+just comparing this to other models. So they certainly compare this to Sonnet 4.6 and Opus 4.6
+
+17
+00:01:40,240 --> 00:01:47,120
+as well as the GPT models. But it's really comparing to Gemini 3 Pro that we can sort of see
+
+18
+00:01:47,200 --> 00:01:54,640
+stuff. So if we look at, for example, the humanity's last exam, this is a huge bump over Gemini 3 Pro.
+
+19
+00:01:54,640 --> 00:02:02,240
+Yes, it's more than Sonnet 4.6. Yes, it's more than Opus 4.6. But look at the bump that we're
+
+20
+00:02:02,240 --> 00:02:10,480
+seeing compared to Gemini 3 Pro. And don't forget this is just a .1 release, right? And I'd say the
+
+21
+00:02:10,480 --> 00:02:16,080
+main reason for that is like I'll show you in a second when we actually do some look at some examples
+
+22
+00:02:16,080 --> 00:02:23,520
+that this thinking high mode in here really is like a deep think mini kind of thing that they've
+
+23
+00:02:23,520 --> 00:02:33,040
+got going on here. We can see this also when we look at like the Arc AGI. Arc AGI, 77% compared to 31%
+
+24
+00:02:33,040 --> 00:02:38,960
+with Gemini 3 Pro. Obviously, you know, the anthropic models were doing a lot better than that.
+
+25
+00:02:38,960 --> 00:02:45,280
+Google probably hadn't really sort of even thought about optimizing for this maybe with Gemini 3 Pro.
+
+26
+00:02:45,280 --> 00:02:50,319
+But we can see that this has got a huge bump here. And while Google's not saying this sort of,
+
+27
+00:02:50,319 --> 00:02:55,920
+you know, in their blog post, this definitely looks like that they're starting to get really good
+
+28
+00:02:55,920 --> 00:03:03,439
+RL environments for training these kinds of tasks, which then translate to better benchmarks.
+
+29
+00:03:03,439 --> 00:03:09,039
+We see this also when we look at, you know, some of the other things which would have RL environments
+
+30
+00:03:09,120 --> 00:03:15,519
+like coding bench, like things like this MCP Atlas where you could imagine that you're doing that
+
+31
+00:03:15,519 --> 00:03:21,359
+like the agentic search, et cetera. So clearly we're seeing, you know, just not just benchmarks
+
+32
+00:03:21,359 --> 00:03:28,479
+show this off. We can see here that, okay, you know, getting it to generate things for designs,
+
+33
+00:03:28,479 --> 00:03:34,560
+3.1 Pro is already looking a lot better than 3 Pro. Again, this is something that you could
+
+34
+00:03:34,560 --> 00:03:40,879
+imagine having been done with a really good RL environment. Same for sort of, you know,
+
+35
+00:03:40,879 --> 00:03:46,240
+graphic designs on coding and stuff like that, we can see that, okay, the model's gotten better
+
+36
+00:03:46,240 --> 00:03:51,599
+with those sorts of things. Now, apart from this Google's not actually saying a lot here, right?
+
+37
+00:03:51,599 --> 00:03:56,879
+So it is kind of interesting that like I said, this is a .1 release. Perhaps in the past,
+
+38
+00:03:56,879 --> 00:04:03,920
+they would have just basically said, well, here's another new Gemini 3 Pro preview. Like they did
+
+39
+00:04:03,920 --> 00:04:09,680
+with say the 2.5 previews where they were multiple previews before we got to GA. It does seem
+
+40
+00:04:09,680 --> 00:04:16,720
+here now that rather than just have another rollout of a new dated preview with a newer date kind of
+
+41
+00:04:16,720 --> 00:04:21,840
+thing, they've actually decided to call this Gemini 3.1 Pro. And those benchmarks, I think,
+
+42
+00:04:21,840 --> 00:04:27,600
+really do justify that. So let's jump into having a play with this and see how it performs.
+
+43
+00:04:27,600 --> 00:04:32,560
+And I want to show you how you can actually take advantage of the different thinking levels
+
+44
+00:04:32,560 --> 00:04:39,759
+that this model has so that it can go from, you know, very quick thinking right up to things where
+
+45
+00:04:39,759 --> 00:04:47,040
+you're looking at five minutes plus before you've got a full answer back. Okay, so to get started,
+
+46
+00:04:47,040 --> 00:04:52,480
+you come over here and you'll basically just select the latest model. So if you don't see it,
+
+47
+00:04:52,480 --> 00:04:57,840
+just click all, they're suddenly rolling it out. You should be able to see it pretty quickly in here.
+
+48
+00:04:58,400 --> 00:05:03,040
+So I'm going to start off with one of the questions from the international math
+
+49
+00:05:03,040 --> 00:05:10,800
+Olympiad problem. Now this question, when I ran it last year with the deep think model, it was
+
+50
+00:05:10,800 --> 00:05:16,480
+able to give us the correct answer, but it took a long time, right? I think it was from memory
+
+51
+00:05:16,480 --> 00:05:22,720
+17 plus minutes before we were getting time to first token here. So you can see here we've got
+
+52
+00:05:22,720 --> 00:05:28,880
+this setup. I've got thinking level set to high. And we can see that it's definitely taking, you
+
+53
+00:05:28,880 --> 00:05:34,560
+know, time to get to, you know, to the answer. And this is partly because we've got the thinking level,
+
+54
+00:05:34,560 --> 00:05:41,040
+you know, set to high with the previous version of Gemini 3 pro, you could only have low or high.
+
+55
+00:05:41,040 --> 00:05:47,760
+Now you can have low medium or high as the setting in there. So you'll notice as it's going through
+
+56
+00:05:47,839 --> 00:05:53,519
+this, we're already sort of two minutes in of thinking. But the answer we're looking for here
+
+57
+00:05:53,519 --> 00:06:00,959
+is basically 0, 1 and 3. So let's see if it's we're going to get the answer. Okay, so I paused it
+
+58
+00:06:00,959 --> 00:06:06,319
+while it was actually going through. It did finally come to the right answer. It took, you know,
+
+59
+00:06:06,319 --> 00:06:11,839
+over eight minutes to get to this answer. That's roughly half of what deep think used to take.
+
+60
+00:06:11,839 --> 00:06:16,159
+But this shows one of the things that is really kind of interesting with this model.
+
+61
+00:06:16,160 --> 00:06:24,560
+And that's that if you have thinking set to high, this acts almost like a mini version of Gemini
+
+62
+00:06:24,560 --> 00:06:28,720
+Deep Think. And this is one of the things that they're kind of emphasized that this model now
+
+63
+00:06:28,720 --> 00:06:35,200
+has taken sort of lessons from Gemini Deep Think, both the earlier versions and the more recent
+
+64
+00:06:35,200 --> 00:06:43,040
+versions. Now at the same time, if I set this to low, right, we should get something that the
+
+65
+00:06:43,040 --> 00:06:49,200
+thinking is much quicker on this. Okay, and so while the thinking was much faster here, it actually
+
+66
+00:06:49,200 --> 00:06:55,360
+didn't get the correct answer, you know, in this case. So you do want to make use of the thinking
+
+67
+00:06:55,360 --> 00:07:01,040
+level when you're doing different tasks for this. So another task that people have been doing a lot
+
+68
+00:07:01,040 --> 00:07:07,920
+is creating SVGs. And this one is I've just asked it to make me the SVG of a cat writing a bicycle.
+
+69
+00:07:07,920 --> 00:07:14,080
+So if we render this out, you can see that, okay, yeah, it's perhaps not the best cat in the world,
+
+70
+00:07:14,080 --> 00:07:18,960
+but it comes out, you know, quite good. It looks like the cat's wearing a scarf. We've got
+
+71
+00:07:18,960 --> 00:07:23,920
+our bicycle, which looks pretty accurate. We've even got a chain. We've got the legs of the cat
+
+72
+00:07:23,920 --> 00:07:28,720
+actually on the pedals, which is kind of good in there. Okay, so if you want to play with the model
+
+73
+00:07:28,720 --> 00:07:34,800
+yourself, you can just come into AI Studio and try out the model for free and try out your own prompts
+
+74
+00:07:34,800 --> 00:07:39,680
+and sort of see, remember, the big thing here is you should be experimenting with the different
+
+75
+00:07:39,680 --> 00:07:44,960
+thinking levels. If you've got it set to high, it can take a lot longer to give you an answer.
+
+76
+00:07:45,600 --> 00:07:52,160
+But you're definitely getting sort of like a Gemini Deepink Mini out of this model when you do that.
+
+77
+00:07:52,160 --> 00:07:58,560
+So the model is rolling out to the Gemini Pro plan. It's already out on Google Cloud. If you want
+
+78
+00:07:58,560 --> 00:08:04,000
+to try it out there, you can certainly use it there as well. And I'd say that while this is an
+
+79
+00:08:04,000 --> 00:08:10,560
+incremental sort of point one step, it is a big update that basically gets the model back into
+
+80
+00:08:10,560 --> 00:08:18,160
+the same sort of competitive area as Opus 4.6 and the latest GPT models as well. So just as
+
+81
+00:08:18,160 --> 00:08:25,199
+three Pro spurred a whole new sort of takeoff in both the sort of proprietary models and also the
+
+82
+00:08:25,199 --> 00:08:32,080
+open model weights over the past three months, you've got to wonder now that Gemini 3.1 Pro is out
+
+83
+00:08:32,160 --> 00:08:37,680
+and actually has seriously bumped its performance, I'll be going to see other models release new
+
+84
+00:08:37,680 --> 00:08:42,000
+versions to try and catch up. Anyway, let me know what you think in the comments and as always,
+
+85
+00:08:42,000 --> 00:08:44,639
+I'll talk to you in the next video. Bye for now.
+

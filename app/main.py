@@ -1,51 +1,58 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
-from app.api.routes import router
-from app.core.config import settings
+"""FastAPI application entry point for the YouTube Parser service."""
+
+from __future__ import annotations
+
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.routes import router as api_router
+from app.config import settings
+
+# ── Logging ──────────────────────────────────────────────
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
-from contextlib import asynccontextmanager
-import os
-import signal
+# ── App ──────────────────────────────────────────────────
 
-# Provide a definitive force-quit hook on Windows for CTRL+C
-def handle_force_quit(signum, frame):
-    logger.info("Received CTRL+C, forcing immediate shutdown...")
-    os._exit(0)
+app = FastAPI(
+    title="YouTube Parser",
+    description="Private high-performance YouTube video parser & download service",
+    version="0.1.0",
+)
 
-try:
-    signal.signal(signal.SIGINT, handle_force_quit)
-except Exception:
-    pass
+# CORS – allow frontend dev server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    yield
+# Mount routes
+app.include_router(api_router)
 
-app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
-app.include_router(router, prefix=settings.API_V1_STR)
-# Determine the absolute path to the frontend/dist directory
-frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 
-if os.path.exists(frontend_dist):
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+@app.get("/health")
+async def health_check() -> dict[str, str]:
+    return {"status": "ok"}
 
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_react_app(full_path: str):
-        index_path = os.path.join(frontend_dist, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        return {"error": "React build not found. Please run 'npm run build' in frontend/."}
-else:
-    @app.get("/", include_in_schema=False)
-    async def root():
-        return {"message": "Server running. React frontend not built yet."}
 
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    ico_bytes = b'\x00\x00\x01\x00\x01\x00\x01\x01\x00\x00\x01\x00\x18\x006\x00\x00\x00\x16\x00\x00\x00(\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00\x01\x00\x18\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\xff\x00\x00\x00\x00\x00\x00'
-    return Response(content=ico_bytes, media_type="image/x-icon")
+# ── Dev entry point ──────────────────────────────────────
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=True,
+    )
