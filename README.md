@@ -214,3 +214,12 @@ curl http://127.0.0.1:4416/health
 
 
 If YouTube still returns "Sign in to confirm you're not a bot", provide exported cookies via `YOUTUBE_COOKIE_FILE` (Netscape format).
+
+With Docker Compose, `./secrets` is mounted to `/app/secrets` in the app container. A typical setup is:
+
+```bash
+mkdir -p secrets
+# put your exported Netscape cookies file into ./secrets
+# then set in .env:
+YOUTUBE_COOKIE_FILE=/app/secrets/youtube_cookies.txt
+```

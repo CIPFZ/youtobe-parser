@@ -21,6 +21,7 @@ services:
       - "8000:8000"
     volumes:
       - ./downloads:/app/downloads
+      - ./secrets:/app/secrets
     depends_on:
       redis:
         condition: service_healthy
