@@ -105,9 +105,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 async def call_llm_translation(texts: List[str]) -> List[str]:
-    """Call the LLM API to translate a batch of subtitle texts."""
+    """Call an OpenAI-compatible chat completion API to translate subtitle text."""
     if not texts:
         return []
+
+    if not settings.openai_api_key:
+        logger.warning("OPENAI_API_KEY is empty, skip translation and keep original text")
+        return texts
 
     # Map the texts to numbered lines to ensure LLM keeps the order
     prompt = "Translate the following English subtitles to Chinese. Maintain the exact line count and formatting. Return ONLY the translated lines, each preceded by its line number and a separator (e.g., '1|你好').\n\n"
@@ -115,11 +119,11 @@ async def call_llm_translation(texts: List[str]) -> List[str]:
         prompt += f"{i}|{text}\n"
 
     headers = {
-        "Authorization": f"Bearer {settings.llm_api_key}",
+        "Authorization": f"Bearer {settings.openai_api_key}",
         "Content-Type": "application/json"
     }
     payload = {
-        "model": settings.llm_model,
+        "model": settings.openai_model,
         "messages": [
             {"role": "system", "content": "You are a professional subtitle translator. You always return exactly the same number of lines as provided, maintaining the exact 'LineNumber|TranslatedText' format."},
             {"role": "user", "content": prompt}
@@ -130,7 +134,7 @@ async def call_llm_translation(texts: List[str]) -> List[str]:
     
     logger.debug("Calling LLM API for %d lines", len(texts))
     
-    url = f"{settings.llm_base_url.rstrip('/')}/chat/completions"
+    url = f"{settings.openai_base_url.rstrip('/')}/chat/completions"
     
     try:
         async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
