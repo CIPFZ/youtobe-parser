@@ -24,6 +24,9 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    # Allow containers to reach host services (e.g. local proxy on host)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   redis:
     image: redis:7-alpine
@@ -60,3 +63,6 @@ services:
       - TOKEN_TIMEOUT=15000
       - http_proxy=${POT_PROXY:-}
       - https_proxy=${POT_PROXY:-}
+    # Needed on Linux to reach host proxy via host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
