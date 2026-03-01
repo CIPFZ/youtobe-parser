@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     openai_base_url: str = Field(default="https://api.openai.com/v1", description="OpenAI-compatible base URL")
     openai_model: str = Field(default="gpt-4o-mini", description="LLM model used for subtitle translation")
 
+    # PO token provider
+    po_token_timeout_seconds: float = Field(default=45.0, description="Timeout in seconds for PO token provider requests")
+
     # Task Store
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL for task status storage")
     task_ttl_seconds: int = Field(default=86400, description="How long completed/failed task metadata is kept in Redis")

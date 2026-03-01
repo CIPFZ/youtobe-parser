@@ -56,3 +56,6 @@ When profile `pot` is enabled, default `PO_TOKEN_SERVER` can be `http://pot-prov
 
 
 > Troubleshooting: If pot-provider logs `protocol mismatch`, set `POT_PROXY` to a valid **HTTP/HTTPS** proxy or leave it empty.
+
+
+> If pot-provider is slow to mint token, increase `PO_TOKEN_TIMEOUT_SECONDS` (e.g. 45~90).

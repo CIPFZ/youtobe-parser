@@ -16,10 +16,6 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Timeout for token requests (seconds)
-_REQUEST_TIMEOUT = 15.0
-
-
 @dataclass
 class POToken:
     """A PO Token result from the provider."""
@@ -46,8 +42,13 @@ async def fetch_po_token(video_id: str = "") -> Optional[POToken]:
         payload["video_id"] = video_id
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT, trust_env=False) as client:
-            resp = await client.post(url, json=payload)
+        timeout = settings.po_token_timeout_seconds
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+            try:
+                resp = await client.post(url, json=payload)
+            except httpx.ReadTimeout:
+                logger.warning("PO Token provider timeout (%.1fs) at %s, retry once", timeout, url)
+                resp = await client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()
 
