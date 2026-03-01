@@ -106,12 +106,13 @@ def _extract_sync(url: str, opts: dict[str, Any]) -> dict[str, Any]:
 async def analyze_video(url: str, task_id: str) -> None:
     """Top-level async entry: extract all formats for *url* and update the task store."""
     sem = _get_semaphore()
-    await task_store.update_task(task_id, status="processing")
+    await task_store.update_task(task_id, status="processing", progress=5.0)
 
     try:
         # Fetch PO Token from provider (graceful fallback if unavailable)
         video_id = _extract_video_id(url)
         token = await fetch_po_token(video_id)
+        await task_store.update_task(task_id, progress=20.0)
 
         async with sem:
             loop = asyncio.get_running_loop()
@@ -124,6 +125,8 @@ async def analyze_video(url: str, task_id: str) -> None:
             info: dict[str, Any] = await loop.run_in_executor(
                 None, functools.partial(_extract_sync, url, opts)
             )
+
+        await task_store.update_task(task_id, progress=70.0)
 
         # Parse formats
         raw_formats: list[dict[str, Any]] = info.get("formats") or []
