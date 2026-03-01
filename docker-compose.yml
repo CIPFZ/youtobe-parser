@@ -1,21 +1,44 @@
-# ──────────────────────────────────────────────────
-# YouTube Parser — Docker Compose
-# ──────────────────────────────────────────────────
-# Start PO Token Provider:
-#   docker compose up pot-provider -d
+# YouTube Parser — docker compose
+# Architecture:
+# - app: all-in-one container (FastAPI API + built frontend static files)
+# - redis: shared generic Redis for task metadata
+# Optional:
+# - pot-provider can be external; set PO_TOKEN_SERVER accordingly in .env
 
 services:
-  # PO Token Provider – generates YouTube Proof-of-Origin tokens
-  # to bypass bot verification. Exposes HTTP API on port 4416.
-  pot-provider:
-    image: brainicism/bgutil-ytdlp-pot-provider:latest
-    container_name: ytparser-pot-provider
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ytparser-app
     restart: unless-stopped
-    ports:
-      - "4416:4416"
+    env_file:
+      - .env
     environment:
-      # Pass proxy to the token provider if needed
-      - http_proxy=${GLOBAL_PROXY:-}
-      - https_proxy=${GLOBAL_PROXY:-}
-      # Token generation timeout (ms)
-      - TOKEN_TIMEOUT=15000
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - PO_TOKEN_SERVER=${PO_TOKEN_SERVER:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./downloads:/app/downloads
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: ytparser-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  redis-data:
