@@ -159,7 +159,7 @@ curl http://localhost:8000/health
 如果你通过 GHCR 发布镜像，可在服务器执行：
 
 ```bash
-bash scripts/update-container.sh
+COMPOSE_PROFILES=pot bash scripts/update-container.sh
 ```
 
 可选环境变量：
@@ -173,6 +173,7 @@ bash scripts/update-container.sh
 GHCR_USERNAME=yourname \
 GHCR_TOKEN=ghp_xxx \
 APP_IMAGE=ghcr.io/cipfz/youtobe-parser:latest \
+COMPOSE_PROFILES=pot \
 bash scripts/update-container.sh
 ```
 

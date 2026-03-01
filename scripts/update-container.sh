@@ -9,11 +9,19 @@ set -euo pipefail
 #   ENV_FILE=.env
 #   GHCR_USERNAME=<github-username>
 #   GHCR_TOKEN=<github-token-with-read:packages>
+#   COMPOSE_PROFILES=pot          # default enables bundled pot-provider
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${REPO_DIR}/.env}"
 APP_IMAGE="${APP_IMAGE:-ghcr.io/cipfz/youtobe-parser:latest}"
+COMPOSE_PROFILES="${COMPOSE_PROFILES:-pot}"
+
+COMPOSE_CMD=(docker compose
+  --env-file "${ENV_FILE}"
+  -f docker-compose.yml
+  -f docker-compose.image.yml
+)
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "[ERROR] docker is not installed" >&2
@@ -40,44 +48,49 @@ else
   echo "[INFO] GHCR credentials not provided, trying anonymous pull"
 fi
 
-echo "[INFO] Pulling app image: ${APP_IMAGE}"
-APP_IMAGE="${APP_IMAGE}" docker compose \
-  --env-file "${ENV_FILE}" \
-  -f docker-compose.yml \
-  -f docker-compose.image.yml \
-  pull app
+echo "[INFO] Using compose profile(s): ${COMPOSE_PROFILES}"
 
-echo "[INFO] Recreating containers with latest image"
-APP_IMAGE="${APP_IMAGE}" docker compose \
-  --env-file "${ENV_FILE}" \
-  -f docker-compose.yml \
-  -f docker-compose.image.yml \
-  up -d --remove-orphans
+echo "[INFO] Pulling latest images"
+APP_IMAGE="${APP_IMAGE}" COMPOSE_PROFILES="${COMPOSE_PROFILES}" "${COMPOSE_CMD[@]}" pull
+
+echo "[INFO] Recreating containers with latest image(s)"
+APP_IMAGE="${APP_IMAGE}" COMPOSE_PROFILES="${COMPOSE_PROFILES}" "${COMPOSE_CMD[@]}" up -d --remove-orphans
 
 echo "[INFO] Cleaning old dangling images"
 docker image prune -f >/dev/null 2>&1 || true
 
+wait_running() {
+  local service="$1"
+  local cid
+  cid="$(APP_IMAGE="${APP_IMAGE}" COMPOSE_PROFILES="${COMPOSE_PROFILES}" "${COMPOSE_CMD[@]}" ps -q "${service}")"
 
+  if [ -z "${cid}" ]; then
+    echo "[WARN] service '${service}' not created (profile may be disabled)"
+    return 0
+  fi
 
-echo "[INFO] Waiting for app container to become healthy/running"
-APP_CID="$(APP_IMAGE="${APP_IMAGE}" docker compose --env-file "${ENV_FILE}" -f docker-compose.yml -f docker-compose.image.yml ps -q app)"
-if [ -n "${APP_CID}" ]; then
-  for _ in $(seq 1 20); do
-    STATUS="$(docker inspect -f '{{.State.Status}}' "${APP_CID}" 2>/dev/null || true)"
-    if [ "${STATUS}" = "running" ]; then
-      echo "[INFO] app container is running"
-      break
+  for _ in $(seq 1 30); do
+    local status
+    status="$(docker inspect -f '{{.State.Status}}' "${cid}" 2>/dev/null || true)"
+    if [ "${status}" = "running" ]; then
+      echo "[INFO] ${service} is running"
+      return 0
     fi
     sleep 2
   done
 
-  STATUS="$(docker inspect -f '{{.State.Status}}' "${APP_CID}" 2>/dev/null || true)"
-  if [ "${STATUS}" != "running" ]; then
-    echo "[ERROR] app container failed to stay running (status=${STATUS})" >&2
-    echo "[INFO] Recent app logs:" >&2
-    docker logs --tail 120 "${APP_CID}" >&2 || true
-    exit 1
-  fi
+  local status
+  status="$(docker inspect -f '{{.State.Status}}' "${cid}" 2>/dev/null || true)"
+  echo "[ERROR] ${service} failed to stay running (status=${status})" >&2
+  echo "[INFO] Recent ${service} logs:" >&2
+  docker logs --tail 120 "${cid}" >&2 || true
+  return 1
+}
+
+wait_running app
+wait_running redis
+if [[ "${COMPOSE_PROFILES}" == *"pot"* ]]; then
+  wait_running pot-provider
 fi
 
 echo "[DONE] Update completed"
