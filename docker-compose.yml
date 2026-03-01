@@ -58,5 +58,5 @@ services:
     profiles: ["pot"]
     environment:
       - TOKEN_TIMEOUT=15000
-      - http_proxy=${GLOBAL_PROXY:-}
-      - https_proxy=${GLOBAL_PROXY:-}
+      - http_proxy=${POT_PROXY:-}
+      - https_proxy=${POT_PROXY:-}

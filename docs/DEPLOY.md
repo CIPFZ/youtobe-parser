@@ -53,3 +53,6 @@ docker compose --profile pot up -d
 ```
 
 When profile `pot` is enabled, default `PO_TOKEN_SERVER` can be `http://pot-provider:4416`.
+
+
+> Troubleshooting: If pot-provider logs `protocol mismatch`, set `POT_PROXY` to a valid **HTTP/HTTPS** proxy or leave it empty.

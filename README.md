@@ -198,3 +198,6 @@ bash scripts/update-container.sh
 ## License
 
 仅供学习与个人项目使用，请遵守 YouTube 及相关服务条款。
+
+
+> Troubleshooting: If pot-provider logs `protocol mismatch`, set `POT_PROXY` to a valid **HTTP/HTTPS** proxy or leave it empty.

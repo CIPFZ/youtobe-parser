@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 import yt_dlp
+from yt_dlp.utils import DownloadError
 
 from app.config import settings
 from app.core.pot_client import fetch_po_token
@@ -61,6 +62,7 @@ def _build_ydl_opts(
     *,
     po_token: str = "",
     content_binding: str = "",
+    use_proxy: bool = True,
 ) -> dict[str, Any]:
     """Build yt-dlp option dict, optionally with PO Token."""
 
@@ -83,7 +85,7 @@ def _build_ydl_opts(
     }
 
     # Proxy
-    if settings.global_proxy:
+    if use_proxy and settings.global_proxy:
         opts["proxy"] = settings.global_proxy
 
     # PO Token injection from HTTP Provider
@@ -122,9 +124,29 @@ async def analyze_video(url: str, task_id: str) -> None:
                 po_token=token.po_token if token else "",
                 content_binding=token.content_binding if token else "",
             )
-            info: dict[str, Any] = await loop.run_in_executor(
-                None, functools.partial(_extract_sync, url, opts)
-            )
+            try:
+                info: dict[str, Any] = await loop.run_in_executor(
+                    None, functools.partial(_extract_sync, url, opts)
+                )
+            except DownloadError as exc:
+                err = str(exc)
+                proxy_refused = ("Connection refused" in err or "[Errno 111]" in err) and bool(settings.global_proxy)
+                if settings.retry_without_proxy_on_refused and proxy_refused:
+                    logger.warning("Task %s proxy refused, retrying once without proxy", task_id)
+                    no_proxy_opts = _build_ydl_opts(
+                        task_id,
+                        loop,
+                        po_token=token.po_token if token else "",
+                        content_binding=token.content_binding if token else "",
+                        use_proxy=False,
+                    )
+                    info = await loop.run_in_executor(
+                        None, functools.partial(_extract_sync, url, no_proxy_opts)
+                    )
+                else:
+                    raise
+
+        await task_store.update_task(task_id, progress=70.0)
 
         await task_store.update_task(task_id, progress=70.0)
 

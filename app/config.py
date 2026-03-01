@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis URL for task status storage")
     task_ttl_seconds: int = Field(default=86400, description="How long completed/failed task metadata is kept in Redis")
 
+    # Networking fallback
+    retry_without_proxy_on_refused: bool = Field(default=True, description="Retry yt-dlp once without proxy when proxy is refused")
+
     # Concurrency
     max_concurrent_downloads: int = Field(default=3, description="Max simultaneous yt-dlp tasks")
 
