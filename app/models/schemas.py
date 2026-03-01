@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 class AnalyzeRequest(BaseModel):
     """POST /v1/analyze body."""
     url: str
+
 
 class TranslateRequest(BaseModel):
     """POST /v1/translate body."""
@@ -29,7 +30,7 @@ class VideoFormat(BaseModel):
     acodec: Optional[str] = None
     filesize: Optional[int] = None
     filesize_approx: Optional[int] = None
-    tbr: Optional[float] = None          # total bitrate
+    tbr: Optional[float] = None
     url: Optional[str] = None
     format_note: Optional[str] = None
     category: str = "unknown"            # muxed / video_only / audio_only
@@ -53,13 +54,15 @@ class VideoInfo(BaseModel):
 class TaskResponse(BaseModel):
     """Returned after creating a new task."""
     task_id: str
+    task_type: Literal["analyze", "translate"]
     status: str = "pending"
 
 
 class TaskStatusResponse(BaseModel):
     """Full task state returned by GET /v1/tasks/{task_id}."""
     task_id: str
-    status: str                          # pending | processing | completed | failed
-    progress: float = 0.0               # 0‒100
+    task_type: Literal["analyze", "translate"]
+    status: str
+    progress: float = 0.0
     result: Optional[Any] = None
     error: Optional[str] = None
