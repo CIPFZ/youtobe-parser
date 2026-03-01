@@ -29,16 +29,24 @@ services:
     image: redis:7-alpine
     container_name: ytparser-redis
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    # 建议在 command 中增加 maxmemory 限制（通常设为容器限制的 80% 左右）
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "400mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
+      - ./data/redis:/data
+    # --- 新增资源限制配置 ---
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'        # 限制最多使用 0.5 核 CPU
+          memory: 512M        # 限制最多使用 512MB 内存（硬限制）
+        reservations:
+          cpus: '0.25'        # 预留 0.25 核 CPU（软限制）
+          memory: 256M        # 预留 256MB 内存
+    # -----------------------
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
-
-volumes:
-  redis-data:
