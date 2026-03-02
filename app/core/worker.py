@@ -186,6 +186,69 @@ def _resolve_cookie_file() -> str:
     return ""
 
 
+def _is_bot_check_error(err_text: str) -> bool:
+    lowered = err_text.lower()
+    return ("sign in to confirm you’re not a bot" in lowered) or ("sign in to confirm you're not a bot" in lowered)
+
+
+async def _extract_with_fallbacks(
+    url: str,
+    task_id: str,
+    loop: asyncio.AbstractEventLoop,
+    *,
+    po_token: str,
+    content_binding: str,
+) -> dict[str, Any]:
+    """Try multiple yt-dlp strategies for flaky YouTube bot-check/proxy scenarios."""
+    strategies = [
+        {"name": "po+proxy", "use_proxy": True, "use_po": True},
+        {"name": "po-no-proxy", "use_proxy": False, "use_po": True},
+        {"name": "cookie-only+proxy", "use_proxy": True, "use_po": False},
+        {"name": "cookie-only+no-proxy", "use_proxy": False, "use_po": False},
+    ]
+
+    # skip no-proxy attempts if proxy isn't configured or retry is disabled
+    if (not settings.global_proxy) or (not settings.retry_without_proxy_on_refused):
+        strategies = [s for s in strategies if s["use_proxy"]]
+
+    last_exc: Exception | None = None
+    for idx, s in enumerate(strategies, start=1):
+        logger.info("Task %s yt-dlp attempt %d/%d strategy=%s", task_id, idx, len(strategies), s["name"])
+        opts = _build_ydl_opts(
+            task_id,
+            loop,
+            po_token=po_token if s["use_po"] else "",
+            content_binding=content_binding if s["use_po"] else "",
+            use_proxy=s["use_proxy"],
+        )
+
+        try:
+            return await loop.run_in_executor(None, functools.partial(_extract_sync, url, opts))
+        except DownloadError as exc:
+            last_exc = exc
+            err = str(exc)
+            proxy_refused = ("connection refused" in err.lower() or "[errno 111]" in err.lower()) and bool(settings.global_proxy)
+            bot_error = _is_bot_check_error(err)
+
+            # only continue retry chain for known recoverable patterns
+            if not (proxy_refused or bot_error):
+                raise
+
+            if idx == len(strategies):
+                raise
+
+            logger.warning(
+                "Task %s attempt %s failed (%s). Retrying with next strategy.",
+                task_id,
+                s["name"],
+                "proxy_refused" if proxy_refused else "bot_check",
+            )
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("yt-dlp extraction failed without a captured exception")
+
+
 def _extract_sync(url: str, opts: dict[str, Any]) -> dict[str, Any]:
     """Run yt-dlp extract_info in a blocking manner (called in executor)."""
     with yt_dlp.YoutubeDL(opts) as ydl:
@@ -205,33 +268,13 @@ async def analyze_video(url: str, task_id: str) -> None:
 
         async with sem:
             loop = asyncio.get_running_loop()
-            opts = _build_ydl_opts(
+            info: dict[str, Any] = await _extract_with_fallbacks(
+                url,
                 task_id,
                 loop,
                 po_token=token.po_token if token else "",
                 content_binding=token.content_binding if token else "",
             )
-            try:
-                info: dict[str, Any] = await loop.run_in_executor(
-                    None, functools.partial(_extract_sync, url, opts)
-                )
-            except DownloadError as exc:
-                err = str(exc)
-                proxy_refused = ("Connection refused" in err or "[Errno 111]" in err) and bool(settings.global_proxy)
-                if settings.retry_without_proxy_on_refused and proxy_refused:
-                    logger.warning("Task %s proxy refused, retrying once without proxy", task_id)
-                    no_proxy_opts = _build_ydl_opts(
-                        task_id,
-                        loop,
-                        po_token=token.po_token if token else "",
-                        content_binding=token.content_binding if token else "",
-                        use_proxy=False,
-                    )
-                    info = await loop.run_in_executor(
-                        None, functools.partial(_extract_sync, url, no_proxy_opts)
-                    )
-                else:
-                    raise
 
         await task_store.update_task(task_id, progress=70.0)
 
@@ -280,7 +323,7 @@ async def analyze_video(url: str, task_id: str) -> None:
     except Exception as exc:
         logger.exception("Task %s failed", task_id)
         err_text = str(exc)
-        if "Sign in to confirm you’re not a bot" in err_text or "Sign in to confirm you're not a bot" in err_text:
+        if _is_bot_check_error(err_text):
             configured_cookie = (settings.youtube_cookie_file or '').strip()
             err_text += (
                 " | Hint: configure YOUTUBE_COOKIE_FILE with exported YouTube cookies (Netscape format)."
