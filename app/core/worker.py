@@ -67,6 +67,7 @@ def _build_ydl_opts(
     po_token: str = "",
     content_binding: str = "",
     use_proxy: bool = True,
+    player_client: str = "web",
 ) -> dict[str, Any]:
     """Build yt-dlp option dict, optionally with PO Token."""
 
@@ -97,14 +98,17 @@ def _build_ydl_opts(
     if cookie_file:
         opts["cookiefile"] = cookie_file
 
-    # PO Token injection from HTTP Provider
+    # YouTube extractor args (client + optional PO token)
+    yt_args: list[str] = [f"player_client={player_client}"]
     if po_token:
-        yt_args: list[str] = [f"po_token=web+{po_token}"]
+        yt_args.append(f"po_token=web+{po_token}")
         if content_binding:
             yt_args.append(f"po_token_visitor_data={content_binding}")
-        opts["extractor_args"] = {"youtube": yt_args}
         logger.info("PO Token injected into yt-dlp extractor args")
+    else:
+        logger.info("Using yt-dlp without PO token (player_client=%s)", player_client)
 
+    opts["extractor_args"] = {"youtube": yt_args}
     return opts
 
 
@@ -201,10 +205,11 @@ async def _extract_with_fallbacks(
 ) -> dict[str, Any]:
     """Try multiple yt-dlp strategies for flaky YouTube bot-check/proxy scenarios."""
     strategies = [
-        {"name": "po+proxy", "use_proxy": True, "use_po": True},
-        {"name": "po-no-proxy", "use_proxy": False, "use_po": True},
-        {"name": "cookie-only+proxy", "use_proxy": True, "use_po": False},
-        {"name": "cookie-only+no-proxy", "use_proxy": False, "use_po": False},
+        {"name": "po+proxy+web", "use_proxy": True, "use_po": True, "player_client": "web"},
+        {"name": "po-no-proxy+web", "use_proxy": False, "use_po": True, "player_client": "web"},
+        {"name": "cookie-only+proxy+web", "use_proxy": True, "use_po": False, "player_client": "web"},
+        {"name": "cookie-only+proxy+android", "use_proxy": True, "use_po": False, "player_client": "android"},
+        {"name": "cookie-only+no-proxy+android", "use_proxy": False, "use_po": False, "player_client": "android"},
     ]
 
     # skip no-proxy attempts if proxy isn't configured or retry is disabled
@@ -220,6 +225,7 @@ async def _extract_with_fallbacks(
             po_token=po_token if s["use_po"] else "",
             content_binding=content_binding if s["use_po"] else "",
             use_proxy=s["use_proxy"],
+            player_client=s["player_client"],
         )
 
         try:
