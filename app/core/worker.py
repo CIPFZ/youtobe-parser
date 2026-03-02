@@ -7,7 +7,9 @@ import functools
 import logging
 import os
 import re
+import time
 from pathlib import Path
+from http.cookiejar import MozillaCookieJar
 from typing import Any
 
 import yt_dlp
@@ -106,6 +108,45 @@ def _build_ydl_opts(
     return opts
 
 
+def _inspect_cookie_file(cookie_path: Path) -> str:
+    """Return a short health summary for a Netscape/Mozilla cookie file."""
+    jar = MozillaCookieJar()
+    try:
+        jar.load(str(cookie_path), ignore_discard=True, ignore_expires=True)
+    except Exception as exc:
+        logger.warning("Failed to parse cookie file %s: %s", cookie_path, exc)
+        return "cookie file parse failed"
+
+    now = time.time()
+    total = 0
+    yt_total = 0
+    yt_alive = 0
+    sid_like = 0
+
+    for ck in jar:
+        total += 1
+        domain = (ck.domain or '').lower()
+        name = (ck.name or '').upper()
+        is_yt = ('youtube.com' in domain) or ('google.com' in domain)
+        if not is_yt:
+            continue
+        yt_total += 1
+        if not ck.expires or ck.expires > now:
+            yt_alive += 1
+        if name in {'SID', '__SECURE-1PSID', '__SECURE-3PSID', 'SAPISID', '__SECURE-1PSIDTS', '__SECURE-3PSIDTS'}:
+            sid_like += 1
+
+    summary = f"cookies(total={total}, yt={yt_total}, yt_alive={yt_alive}, sid_like={sid_like})"
+    if yt_total == 0:
+        logger.warning("Cookie file %s has no youtube/google cookies: %s", cookie_path, summary)
+    elif yt_alive == 0:
+        logger.warning("Cookie file %s has no unexpired youtube/google cookies: %s", cookie_path, summary)
+    else:
+        logger.info("Cookie diagnostics for %s: %s", cookie_path, summary)
+
+    return summary
+
+
 def _resolve_cookie_file() -> str:
     """Resolve an existing cookie file path for yt-dlp and emit diagnostic logs."""
     configured = (settings.youtube_cookie_file or "").strip()
@@ -113,6 +154,7 @@ def _resolve_cookie_file() -> str:
         configured_path = Path(configured)
         if configured_path.exists() and configured_path.is_file():
             logger.info("Using configured YouTube cookie file: %s", configured_path)
+            _inspect_cookie_file(configured_path)
             return str(configured_path)
         logger.warning("Configured YOUTUBE_COOKIE_FILE not found or not a file: %s", configured_path)
 
@@ -125,6 +167,7 @@ def _resolve_cookie_file() -> str:
             path = root / name
             if path.exists() and path.is_file():
                 logger.info("Using discovered YouTube cookie file: %s", path)
+                _inspect_cookie_file(path)
                 return str(path)
 
     for root in search_roots:
@@ -132,6 +175,7 @@ def _resolve_cookie_file() -> str:
             for path in sorted(root.iterdir()):
                 if path.is_file() and path.suffix.lower() in {'.txt', '.cookies', '.cookie'}:
                     logger.info("Using discovered YouTube cookie file: %s", path)
+                    _inspect_cookie_file(path)
                     return str(path)
 
     # Helpful typo hint for common misspelling
@@ -242,6 +286,7 @@ async def analyze_video(url: str, task_id: str) -> None:
                 " | Hint: configure YOUTUBE_COOKIE_FILE with exported YouTube cookies (Netscape format)."
                 + (f" Current YOUTUBE_COOKIE_FILE={configured_cookie!r}." if configured_cookie else " YOUTUBE_COOKIE_FILE is empty.")
                 + " In Docker compose, host ./data/secrets is mounted to /app/secrets."
+                + " Check that cookies are freshly exported (Netscape format) and include unexpired youtube/google SID-like cookies."
             )
         await task_store.update_task(
             task_id,
