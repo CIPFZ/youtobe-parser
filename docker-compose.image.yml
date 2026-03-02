@@ -1,0 +1,6 @@
+services:
+  app:
+    # Override local build and use prebuilt registry image.
+    image: ${APP_IMAGE:-ghcr.io/cipfz/youtobe-parser:latest}
+    build: null
+    pull_policy: always
