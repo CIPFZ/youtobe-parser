@@ -16,10 +16,6 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Timeout for token requests (seconds)
-_REQUEST_TIMEOUT = 15.0
-
-
 @dataclass
 class POToken:
     """A PO Token result from the provider."""
@@ -46,8 +42,13 @@ async def fetch_po_token(video_id: str = "") -> Optional[POToken]:
         payload["video_id"] = video_id
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT) as client:
-            resp = await client.post(url, json=payload)
+        timeout = settings.po_token_timeout_seconds
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+            try:
+                resp = await client.post(url, json=payload)
+            except httpx.ReadTimeout:
+                logger.warning("PO Token provider timeout (%.1fs) at %s, retry once", timeout, url)
+                resp = await client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()
 
@@ -64,9 +65,12 @@ async def fetch_po_token(video_id: str = "") -> Optional[POToken]:
     except httpx.ConnectError:
         logger.warning("PO Token provider unreachable at %s — proceeding without token", url)
         return None
+    except httpx.ReadTimeout:
+        logger.warning("PO Token provider timeout at %s — proceeding without token", url)
+        return None
     except httpx.HTTPStatusError as exc:
         logger.warning("PO Token provider returned %s — proceeding without token", exc.response.status_code)
         return None
-    except Exception:
-        logger.exception("Unexpected error fetching PO token")
+    except Exception as exc:
+        logger.warning("Unexpected error fetching PO token: %s", exc)
         return None
