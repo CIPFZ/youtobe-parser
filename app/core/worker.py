@@ -87,6 +87,7 @@ def _build_ydl_opts(
         "no_warnings": True,
         "skip_download": True,          # we only extract info, no download
         "progress_hooks": [_progress_hook],
+        "socket_timeout": settings.yt_dlp_socket_timeout_seconds,
     }
 
     # Proxy
@@ -195,6 +196,11 @@ def _is_bot_check_error(err_text: str) -> bool:
     return ("sign in to confirm you’re not a bot" in lowered) or ("sign in to confirm you're not a bot" in lowered)
 
 
+def _is_timeout_error(err_text: str) -> bool:
+    lowered = err_text.lower()
+    return ("timed out" in lowered) or ("timeout" in lowered)
+
+
 async def _extract_with_fallbacks(
     url: str,
     task_id: str,
@@ -235,9 +241,10 @@ async def _extract_with_fallbacks(
             err = str(exc)
             proxy_refused = ("connection refused" in err.lower() or "[errno 111]" in err.lower()) and bool(settings.global_proxy)
             bot_error = _is_bot_check_error(err)
+            timeout_error = _is_timeout_error(err)
 
             # only continue retry chain for known recoverable patterns
-            if not (proxy_refused or bot_error):
+            if not (proxy_refused or bot_error or timeout_error):
                 raise
 
             if idx == len(strategies):
@@ -247,7 +254,7 @@ async def _extract_with_fallbacks(
                 "Task %s attempt %s failed (%s). Retrying with next strategy.",
                 task_id,
                 s["name"],
-                "proxy_refused" if proxy_refused else "bot_check",
+                "proxy_refused" if proxy_refused else ("timeout" if timeout_error else "bot_check"),
             )
 
     if last_exc is not None:
@@ -336,6 +343,11 @@ async def analyze_video(url: str, task_id: str) -> None:
                 + (f" Current YOUTUBE_COOKIE_FILE={configured_cookie!r}." if configured_cookie else " YOUTUBE_COOKIE_FILE is empty.")
                 + " In Docker compose, host ./data/secrets is mounted to /app/secrets."
                 + " Check that cookies are freshly exported (Netscape format) and include unexpired youtube/google SID-like cookies."
+            )
+        if _is_timeout_error(err_text):
+            err_text += (
+                f" | Hint: yt-dlp request timed out. Current YT_DLP_SOCKET_TIMEOUT_SECONDS={settings.yt_dlp_socket_timeout_seconds}."
+                + " Try increasing timeout (e.g. 30~60), or disable proxy for verification."
             )
         await task_store.update_task(
             task_id,

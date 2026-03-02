@@ -70,4 +70,6 @@ curl http://127.0.0.1:4416/health
 
 If YouTube still returns "Sign in to confirm you're not a bot", provide exported cookies via `YOUTUBE_COOKIE_FILE` (Netscape format).
 
+If logs show `Unable to download API page: timed out`, increase `YT_DLP_SOCKET_TIMEOUT_SECONDS` (for example 30~60) and retry.
+
 In Docker Compose, host directory `./data/secrets` is mounted to `/app/secrets` inside the app container. Store your cookies file there and point `YOUTUBE_COOKIE_FILE` to that in-container path (for example `/app/secrets/youtube_cookies.txt`).

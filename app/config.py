@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     # Networking fallback
     retry_without_proxy_on_refused: bool = Field(default=True, description="Retry yt-dlp once without proxy when proxy is refused")
+    yt_dlp_socket_timeout_seconds: float = Field(default=20.0, description="Socket timeout in seconds for yt-dlp requests")
 
     # Concurrency
     max_concurrent_downloads: int = Field(default=3, description="Max simultaneous yt-dlp tasks")
