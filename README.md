@@ -8,6 +8,39 @@
 
 ---
 
+## 纯 Python 脚本模式（不使用 Web 服务）
+
+按你的需求，项目提供以下脚本：
+
+1. 输入 YouTube 链接，输出最佳清晰度解析结果（直链信息）：
+
+```bash
+python scripts/parse_best_url.py "https://www.youtube.com/watch?v=..." \
+  --proxy "socks5://127.0.0.1:7890" \
+  --cookie-file /app/secrets/youtube_cookies.txt
+```
+
+2. 使用 Python + 代理下载视频+音频（自动合并最佳质量）：
+
+```bash
+python scripts/download_video.py "https://www.youtube.com/watch?v=..." \
+  --proxy "socks5://127.0.0.1:7890" \
+  --cookie-file /app/secrets/youtube_cookies.txt \
+  --output-dir downloads \
+  --timeout 45
+```
+
+3. 使用 LLM 把 SRT/VTT 转成 ASS：
+
+```bash
+python scripts/srt_to_ass_llm.py test_en.srt
+# 可选覆盖：--proxy / --openai-api-key
+```
+
+输出文件默认在 `downloads/`。
+
+---
+
 ## 功能概览
 
 - **异步任务模型**：创建任务后返回 `task_id`，通过轮询查询进度与结果

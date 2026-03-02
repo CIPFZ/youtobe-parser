@@ -1,3 +1,14 @@
+
+## Script-only mode (no web service)
+
+You can run core features directly via Python scripts:
+
+```bash
+python scripts/parse_best_url.py "https://www.youtube.com/watch?v=..." --proxy "socks5://127.0.0.1:7890"
+python scripts/download_video.py "https://www.youtube.com/watch?v=..." --proxy "socks5://127.0.0.1:7890" --timeout 45
+python scripts/srt_to_ass_llm.py test_en.srt
+```
+
 # Deployment & One-Click Container Update
 
 ## 1) Prepare env
