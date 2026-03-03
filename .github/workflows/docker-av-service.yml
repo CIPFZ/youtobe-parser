@@ -2,17 +2,23 @@ name: Build AV Service Docker Image
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "use_script"]
     paths:
       - "server/**"
       - "docker-compose.yml"
       - ".github/workflows/docker-av-service.yml"
+      - "main.py"
+      - "pyproject.toml"
+      - "scripts/**"
   pull_request:
-    branches: ["main"]
+    branches: ["main", "use_script"]
     paths:
       - "server/**"
       - "docker-compose.yml"
       - ".github/workflows/docker-av-service.yml"
+      - "main.py"
+      - "pyproject.toml"
+      - "scripts/**"
   workflow_dispatch:
 
 jobs:

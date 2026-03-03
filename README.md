@@ -188,7 +188,7 @@ LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) ./scripts/deploy_update.sh
 
 ## Docker 镜像自动构建并发布（推荐）
 
-我已经新增 GitHub Actions：`.github/workflows/docker-publish.yml`，会在 `main` 分支 push 后自动构建并发布镜像到 **GHCR**（GitHub Container Registry）。
+我已经新增 GitHub Actions：`.github/workflows/docker-av-service.yml`，会在 `main` 分支 push 后自动构建并发布镜像到 **GHCR**（GitHub Container Registry）。
 
 镜像地址：
 
