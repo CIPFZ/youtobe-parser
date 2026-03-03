@@ -195,6 +195,8 @@ LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) ./scripts/deploy_update.sh
 - `ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest`
 - `ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:sha-<commit>`
 
+> 如果仓库在组织下，且 `GITHUB_TOKEN` 没有 `write:packages`，请在仓库 Secrets 配置 `GHCR_TOKEN`（PAT，需包含 `write:packages`），否则工作流会自动降级为仅 build 不 push。
+
 本地服务器更新命令：
 
 ```bash
