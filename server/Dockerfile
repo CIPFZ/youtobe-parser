@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake pkg-config git ca-certificates \
     libavformat-dev libavcodec-dev libavutil-dev libswresample-dev \
-    libssl-dev zlib1g-dev uuid-dev && \
+    libssl-dev zlib1g-dev uuid-dev libsqlite3-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # build and install sogou/workflow
@@ -39,7 +39,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libstdc++6 ca-certificates \
     libavformat58 libavcodec58 libavutil56 libswresample3 \
-    libssl3 zlib1g libuuid1 && \
+    libssl3 zlib1g libuuid1 libsqlite3-0 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -16,6 +16,23 @@ LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose up --build -d
 bash scripts/e2e_local.sh
 ```
 
+
+### Python 一键脚本配置（推荐使用 .env）
+
+先准备配置文件：
+
+```bash
+cp .env.example .env
+```
+
+至少需要填写：
+
+- `OPENAI_API_KEY`
+- `WHISPER_MODEL_DIR`（默认 `/models/whisper`）
+- `WHISPER_MODEL_NAME`（默认 `ggml-base.en.bin`）
+
+运行 `main.py` 时会自动读取 `.env`（也可用 `--env-file` 指定其他路径），CLI 参数仅作为覆盖项。
+
 ### 2) 查看服务日志
 
 ```bash
