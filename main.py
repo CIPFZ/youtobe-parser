@@ -16,6 +16,7 @@ from typing import Any
 
 import requests
 import yt_dlp
+from dotenv import load_dotenv
 from openai import OpenAI
 
 
@@ -112,6 +113,30 @@ def compose_video(video_path: str, audio_path: str, subtitle_path: str, output_p
         return None
 
 
+def submit_asr_task(
+    audio_path: str,
+    subtitle_path: str,
+    model_dir: str,
+    model_name: str,
+    language: str = "en",
+) -> dict[str, Any] | None:
+    url = f"{BASE_URL}/asr"
+    payload = {
+        "audio_path": audio_path,
+        "subtitle_path": subtitle_path,
+        "model_dir": model_dir,
+        "model_name": model_name,
+        "language": language,
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=20)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"ASR 请求失败: {e}")
+        return None
+
+
 def get_task_status(task_id: str) -> dict[str, Any] | None:
     url = f"{BASE_URL}/task"
     params = {"task_id": task_id}
@@ -122,6 +147,15 @@ def get_task_status(task_id: str) -> dict[str, Any] | None:
     except requests.exceptions.RequestException as e:
         print(f"查询失败: {e}")
         return None
+
+
+def _build_asr_model_hint(model_dir: str, model_name: str) -> str:
+    model_path = f"{model_dir.rstrip('/')}/{model_name}"
+    return (
+        "ASR 模型加载失败，请确认 whisper 模型文件对 C++ 服务可见: "
+        f"{model_path}。可通过 --whisper-model-dir/--whisper-model-name "
+        "或环境变量 WHISPER_MODEL_DIR/WHISPER_MODEL_NAME 覆盖。"
+    )
 
 
 def wait_for_task(task_id: str, logger: logging.Logger, poll_interval: int = 2, max_retries: int = 300) -> dict[str, Any]:
@@ -224,7 +258,7 @@ def translate_srt_to_ass(srt_path: str, ass_path: str, logger: logging.Logger, m
 
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY 未设置，无法执行 Step5 翻译")
+        raise RuntimeError("OPENAI_API_KEY 未设置（可在 .env 中配置），无法执行 Step6 翻译")
 
     client = OpenAI(
         api_key=api_key,
@@ -265,13 +299,27 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 def main() -> None:
     parser = argparse.ArgumentParser(description="Parse and Download YouTube video/audio with logging and step output.")
     parser.add_argument("url", help="YouTube URL")
+    parser.add_argument("--env-file", default=".env", help="Environment file path")
     parser.add_argument("--output-dir", default="data/input", help="Output directory")
-    parser.add_argument("--proxy", default="", help="Proxy URL, e.g. socks5://127.0.0.1:7890")
-    parser.add_argument("--cookie-file", default="", help="Netscape cookies file path")
+    parser.add_argument("--proxy", default=None, help="Proxy URL, e.g. socks5://127.0.0.1:7890")
+    parser.add_argument("--cookie-file", default=None, help="Netscape cookies file path")
     parser.add_argument("--timeout", type=float, default=30.0, help="Socket timeout seconds")
     parser.add_argument("--log-file", default="logs/process.log", help="Log file path")
-    parser.add_argument("--openai-model", default="gpt-4o-mini", help="LLM model for subtitle translation")
+    parser.add_argument("--openai-model", default=None, help="LLM model for subtitle translation (override .env)")
+    parser.add_argument("--whisper-model-dir", default=None, help="Whisper C++ model directory (override .env)")
+    parser.add_argument("--whisper-model-name", default=None, help="Whisper C++ model file name (override .env)")
+    parser.add_argument("--asr-language", default=None, help="ASR language code (override .env)")
     args = parser.parse_args()
+
+    load_dotenv(args.env_file)
+
+    global BASE_URL
+    BASE_URL = os.environ.get("AV_API_BASE_URL", BASE_URL)
+
+    openai_model = args.openai_model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    whisper_model_dir = args.whisper_model_dir or os.environ.get("WHISPER_MODEL_DIR", "/models/whisper")
+    whisper_model_name = args.whisper_model_name or os.environ.get("WHISPER_MODEL_NAME", "ggml-base.en.bin")
+    asr_language = args.asr_language or os.environ.get("ASR_LANGUAGE", "en")
 
     Path("data/input").mkdir(parents=True, exist_ok=True)
     Path("data/output").mkdir(parents=True, exist_ok=True)
@@ -284,8 +332,8 @@ def main() -> None:
     output_path.mkdir(parents=True, exist_ok=True)
 
     base_opts: dict[str, Any] = {
-        "proxy": args.proxy if args.proxy else None,
-        "cookiefile": args.cookie_file if args.cookie_file else None,
+        "proxy": args.proxy if args.proxy is not None else (os.environ.get("GLOBAL_PROXY") or None),
+        "cookiefile": args.cookie_file if args.cookie_file is not None else (os.environ.get("YOUTUBE_COOKIE_FILE") or None),
         "socket_timeout": args.timeout,
     }
     base_opts = {k: v for k, v in base_opts.items() if v is not None}
@@ -351,17 +399,49 @@ def main() -> None:
     final_info = wait_for_task(task_id, logger)
     logger.info("转换任务 %s 成功: %s", task_id, final_info)
 
-    print_step(5, "Translating SRT with OpenAI SDK and generating ASS...")
+    print_step(5, "Generating SRT via C++ ASR (whisper.cpp)...")
     srt_file = os.path.join(output_path, vid, f"{vid}.srt")
+    asr_audio_abs = f"/data/input/{vid}/{vid}.wav"
+    logger.info(
+        "Step5 ASR 参数: model_dir=%s, model_name=%s, language=%s",
+        whisper_model_dir,
+        whisper_model_name,
+        asr_language,
+    )
+    asr_res = submit_asr_task(
+        audio_path=asr_audio_abs,
+        subtitle_path=f"/data/input/{vid}/{vid}.srt",
+        model_dir=whisper_model_dir,
+        model_name=whisper_model_name,
+        language=asr_language,
+    )
+    asr_task_id = asr_res.get("task_id") if asr_res else None
+    if not asr_task_id:
+        logger.error("Step5 提交 ASR 任务失败")
+        sys.exit(1)
+
+    try:
+        asr_info = wait_for_task(asr_task_id, logger)
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "whisper_init_from_file_with_params" in msg:
+            hint = _build_asr_model_hint(whisper_model_dir, whisper_model_name)
+            logger.error("%s", hint)
+            raise RuntimeError(f"{msg}\n{hint}") from exc
+        raise
+
+    logger.info("Step5 ASR 任务成功: %s", asr_info)
+
+    print_step(6, "Translating SRT with OpenAI SDK and generating ASS...")
     ass_file = os.path.join(output_path, vid, f"{vid}.ass")
     if not os.path.exists(srt_file):
-        logger.error("Step5 失败，SRT 文件不存在: %s", srt_file)
+        logger.error("Step6 失败，SRT 文件不存在: %s", srt_file)
         raise FileNotFoundError(f"SRT file not found: {srt_file}")
 
-    translate_srt_to_ass(srt_file, ass_file, logger, model=args.openai_model)
-    logger.info("Step5 完成，ASS 输出: %s", ass_file)
+    translate_srt_to_ass(srt_file, ass_file, logger, model=openai_model)
+    logger.info("Step6 完成，ASS 输出: %s", ass_file)
 
-    print_step(6, "Composing mp4 + m4a + ass via C++ API...")
+    print_step(7, "Composing mp4 + m4a + ass via C++ API...")
     video_abs = f"/data/input/{vid}/{vid}.mp4"
     audio_abs = f"/data/input/{vid}/{vid}.m4a"
     subtitle_abs = f"/data/input/{vid}/{vid}.ass"
@@ -374,9 +454,9 @@ def main() -> None:
         sys.exit(1)
 
     compose_info = wait_for_task(compose_task_id, logger)
-    logger.info("Step6 合成任务成功: %s", compose_info)
+    logger.info("Step7 合成任务成功: %s", compose_info)
 
-    print_step(7, f"全部流程完成: {output_abs}")
+    print_step(8, f"全部流程完成: {output_abs}")
 
 
 if __name__ == "__main__":
