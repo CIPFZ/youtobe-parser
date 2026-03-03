@@ -48,7 +48,7 @@ COPY --from=build /usr/local/lib/libworkflow.so* /usr/local/lib/
 COPY --from=build /usr/local/lib/libwhisper.so* /usr/local/lib/
 COPY --from=build /usr/local/lib/libggml*.so* /usr/local/lib/
 
-ENV LD_LIBRARY_PATH=/usr/local/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+ENV LD_LIBRARY_PATH=/usr/local/lib
 EXPOSE 8888
 
 ENTRYPOINT ["/app/av_service"]
