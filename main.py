@@ -125,6 +125,22 @@ def compose_video(video_path: str, audio_path: str, subtitle_path: str, output_p
         return None
 
 
+def merge_video_audio(video_path: str, audio_path: str, output_path: str) -> dict[str, Any] | None:
+    url = f"{BASE_URL}/merge"
+    payload = {
+        "video_path": video_path,
+        "audio_path": audio_path,
+        "output_path": output_path,
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=20)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"合并请求失败: {e}")
+        return None
+
+
 def submit_asr_task(
     audio_path: str,
     subtitle_path: str,
@@ -480,8 +496,25 @@ def main() -> None:
         logger.error("Step6 提交 compose 任务失败")
         sys.exit(1)
 
-    compose_info = wait_for_task(compose_task_id, logger)
-    logger.info("Step7 合成任务成功: %s", compose_info)
+    try:
+        compose_info = wait_for_task(compose_task_id, logger)
+        logger.info("Step7 合成任务成功: %s", compose_info)
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "open mov_text encoder" not in msg:
+            raise
+
+        logger.warning("Step7 检测到 mov_text 编码器不可用，回退为仅合并音视频（不内嵌字幕）")
+        fallback_output_abs = f"/data/output/{vid}.final.no_sub.mp4"
+        merge_res = merge_video_audio(video_abs, audio_abs, fallback_output_abs)
+        merge_task_id = merge_res.get("task_id") if merge_res else None
+        if not merge_task_id:
+            logger.error("Step7 回退 merge 任务提交失败")
+            raise
+
+        merge_info = wait_for_task(merge_task_id, logger)
+        logger.info("Step7 回退 merge 任务成功: %s", merge_info)
+        output_abs = fallback_output_abs
 
     print_step(8, f"全部流程完成: {output_abs}")
 
