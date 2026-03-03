@@ -6,10 +6,14 @@
 #include "compose_worker.h"
 #include "task_manager.h"
 
+#include <cstdlib>
 #include <iostream>
+#include <string>
 
 int main() {
-    avsvc::TaskManager manager;
+    const char* db_path_env = std::getenv("AV_TASK_DB_PATH");
+    const std::string db_path = (db_path_env != nullptr && db_path_env[0] != '\0') ? db_path_env : "task_manager.db";
+    avsvc::TaskManager manager(db_path);
     avsvc::MergeWorker worker;
     avsvc::AsrWorker asr_worker;
     avsvc::AudioConvertWorker audio_convert_worker;
