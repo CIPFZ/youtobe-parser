@@ -148,6 +148,15 @@ def get_task_status(task_id: str) -> dict[str, Any] | None:
         return None
 
 
+def _build_asr_model_hint(model_dir: str, model_name: str) -> str:
+    model_path = f"{model_dir.rstrip('/')}/{model_name}"
+    return (
+        "ASR 模型加载失败，请确认 whisper 模型文件对 C++ 服务可见: "
+        f"{model_path}。可通过 --whisper-model-dir/--whisper-model-name "
+        "或环境变量 WHISPER_MODEL_DIR/WHISPER_MODEL_NAME 覆盖。"
+    )
+
+
 def wait_for_task(task_id: str, logger: logging.Logger, poll_interval: int = 2, max_retries: int = 300) -> dict[str, Any]:
     logger.info("开始轮询任务: %s", task_id)
     print(f"[{task_id}] 等待任务完成...")
@@ -295,8 +304,8 @@ def main() -> None:
     parser.add_argument("--timeout", type=float, default=30.0, help="Socket timeout seconds")
     parser.add_argument("--log-file", default="logs/process.log", help="Log file path")
     parser.add_argument("--openai-model", default="gpt-4o-mini", help="LLM model for subtitle translation")
-    parser.add_argument("--whisper-model-dir", default="/models", help="Whisper C++ model directory")
-    parser.add_argument("--whisper-model-name", default="ggml-base.en.bin", help="Whisper C++ model file name")
+    parser.add_argument("--whisper-model-dir", default=os.environ.get("WHISPER_MODEL_DIR", "/models/whisper"), help="Whisper C++ model directory")
+    parser.add_argument("--whisper-model-name", default=os.environ.get("WHISPER_MODEL_NAME", "ggml-base.en.bin"), help="Whisper C++ model file name")
     parser.add_argument("--asr-language", default="en", help="ASR language code")
     args = parser.parse_args()
 
@@ -381,6 +390,12 @@ def main() -> None:
     print_step(5, "Generating SRT via C++ ASR (whisper.cpp)...")
     srt_file = os.path.join(output_path, vid, f"{vid}.srt")
     asr_audio_abs = f"/data/input/{vid}/{vid}.wav"
+    logger.info(
+        "Step5 ASR 参数: model_dir=%s, model_name=%s, language=%s",
+        args.whisper_model_dir,
+        args.whisper_model_name,
+        args.asr_language,
+    )
     asr_res = submit_asr_task(
         audio_path=asr_audio_abs,
         subtitle_path=f"/data/input/{vid}/{vid}.srt",
@@ -393,7 +408,16 @@ def main() -> None:
         logger.error("Step5 提交 ASR 任务失败")
         sys.exit(1)
 
-    asr_info = wait_for_task(asr_task_id, logger)
+    try:
+        asr_info = wait_for_task(asr_task_id, logger)
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "whisper_init_from_file_with_params" in msg:
+            hint = _build_asr_model_hint(args.whisper_model_dir, args.whisper_model_name)
+            logger.error("%s", hint)
+            raise RuntimeError(f"{msg}\n{hint}") from exc
+        raise
+
     logger.info("Step5 ASR 任务成功: %s", asr_info)
 
     print_step(6, "Translating SRT with OpenAI SDK and generating ASS...")
