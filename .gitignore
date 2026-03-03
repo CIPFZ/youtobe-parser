@@ -25,3 +25,6 @@ Thumbs.db
 
 # Runtime output
 downloads/
+data/
+logs/
+/models/

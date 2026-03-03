@@ -1,260 +1,253 @@
-# Youtobe Parser
+# youtobe-workflow
 
-一个基于 **FastAPI + yt-dlp + Redis** 的 YouTube 解析与字幕转换服务，支持：
+当前目标：基于 **sogou/workflow** 提供 Web API，并在接口模块中集成 **FFmpeg C API** 完成音视频合并（先做一个简单可用功能）。
 
-1. YouTube 视频信息解析（多格式）
-2. 可选 PO Token Provider 接入（用于增强可用性）
-3. SRT/VTT 字幕翻译并转换为 ASS
+## 推荐部署方式：Docker（避免本地缺库）
 
----
+你遇到的 `libworkflow.so / libavformat.so not found` 本质上是运行环境缺动态库。对于当前阶段，**最稳妥方式就是直接用 Docker 部署运行**。
 
-## 纯 Python 脚本模式（不使用 Web 服务）
-
-按你的需求，项目提供以下脚本：
-
-1. 输入 YouTube 链接，输出最佳清晰度解析结果（直链信息）：
+### 1) 构建并启动
 
 ```bash
-python scripts/parse_best_url.py "https://www.youtube.com/watch?v=..." \
-  --proxy "socks5://127.0.0.1:7890" \
-  --cookie-file /app/secrets/youtube_cookies.txt
+mkdir -p data/input data/output models/whisper
+LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose up --build -d
+
+# 或者直接跑一键端到端脚本（会自动执行 health/merge/asr/task 轮询）
+bash scripts/e2e_local.sh
 ```
 
-2. 使用 Python + 代理下载视频+音频（自动合并最佳质量）：
+### 2) 查看服务日志
 
 ```bash
-python scripts/download_video.py "https://www.youtube.com/watch?v=..." \
-  --proxy "socks5://127.0.0.1:7890" \
-  --cookie-file /app/secrets/youtube_cookies.txt \
-  --output-dir downloads \
-  --timeout 45
+docker compose logs -f av-service
 ```
 
-3. 使用 LLM 把 SRT/VTT 转成 ASS：
-
-```bash
-python scripts/srt_to_ass_llm.py test_en.srt
-# 可选覆盖：--proxy / --openai-api-key
-```
-
-输出文件默认在 `downloads/`。
-
----
-
-## 功能概览
-
-- **异步任务模型**：创建任务后返回 `task_id`，通过轮询查询进度与结果
-- **Redis 任务存储**：默认使用 Redis；若 Redis 不可用可回退为内存存储
-- **OpenAI 兼容翻译接口**：支持 `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`
-- **ASS 文件下载**：翻译完成后可通过接口直接下载生成的字幕文件
-- **容器化部署**：支持 Docker Compose 一键启动
-- **镜像更新脚本**：支持拉取 GHCR 镜像并自动更新容器
-
----
-
-## 项目结构
-
-```text
-.
-├── app/
-│   ├── api/routes.py              # API 路由
-│   ├── core/worker.py             # YouTube 解析任务
-│   ├── core/translator.py         # SRT/VTT -> 翻译 -> ASS
-│   ├── core/task_store.py         # Redis/InMemory 任务存储
-│   ├── config.py                  # 环境变量配置
-│   └── main.py                    # FastAPI 应用入口
-├── frontend/                      # 前端源码（Vue + Vite）
-├── Dockerfile                     # 多阶段构建镜像
-├── docker-compose.yml             # 本地构建运行（app + redis）
-├── docker-compose.image.yml       # 远端镜像覆盖配置
-├── scripts/update-container.sh    # 一键拉取镜像并更新容器
-└── docs/DEPLOY.md                 # 部署说明
-```
-
----
-
-## 快速开始（Docker Compose）
-
-### 1) 准备环境变量
-
-```bash
-cp .env.example .env
-```
-
-根据实际情况填写 `.env`：
-
-- `OPENAI_API_KEY`：字幕翻译时使用
-- `OPENAI_BASE_URL`：OpenAI 兼容网关地址
-- `OPENAI_MODEL`：模型名
-- `REDIS_URL`：默认 `redis://redis:6379/0`
-- `PO_TOKEN_SERVER`：默认内置 `pot-provider`，也可改成外部 provider 地址
-
-### 2) 启动服务
-
-```bash
-docker compose --profile pot up -d --build
-```
-
-
-
-如果你不需要内置 POT 服务，也可以只启动默认服务并把 `PO_TOKEN_SERVER` 指向外部地址：
-
-```bash
-docker compose up -d --build
-```
+> 已默认按 `LOCAL_UID/LOCAL_GID` 运行容器进程，避免输出文件归属 `root:root`。
 
 ### 3) 健康检查
 
 ```bash
-curl http://localhost:8000/health
+curl http://127.0.0.1:8888/healthz
 ```
 
----
-
-## API 说明
-
-统一前缀：`/v1`
-
-### 1. 提交视频解析任务
-
-`POST /v1/analyze`
-
-```json
-{
-  "url": "https://www.youtube.com/watch?v=..."
-}
-```
-
-返回示例：
-
-```json
-{
-  "task_id": "abc123def456",
-  "task_type": "analyze",
-  "status": "pending"
-}
-```
-
-### 2. 提交字幕翻译任务
-
-`POST /v1/translate`
-
-```json
-{
-  "path": "test_en.srt"
-}
-```
-
-> `path` 支持本地路径或 http/https 链接。
-
-返回示例：
-
-```json
-{
-  "task_id": "abc123def456",
-  "task_type": "translate",
-  "status": "pending"
-}
-```
-
-### 3. 查询任务状态
-
-`GET /v1/tasks/{task_id}`
-
-返回示例：
-
-```json
-{
-  "task_id": "abc123def456",
-  "task_type": "translate",
-  "status": "completed",
-  "progress": 100,
-  "result": {
-    "output_path": "/app/downloads/test_en_xxxxxx.ass",
-    "output_name": "test_en_xxxxxx.ass",
-    "source_path": "test_en.srt",
-    "format": "ass"
-  },
-  "error": null
-}
-```
-
-### 4. 下载 ASS 字幕
-
-`GET /v1/translate/download/{task_id}`
-
-任务完成后可直接下载生成文件。
-
----
-
-## 使用远端镜像自动更新
-
-如果你通过 GHCR 发布镜像，可在服务器执行：
+### 4) 提交合并任务
 
 ```bash
-COMPOSE_PROFILES=pot bash scripts/update-container.sh
+curl -X POST http://127.0.0.1:8888/api/v1/merge \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "video_path": "/data/input/video.mp4",
+    "audio_path": "/data/input/audio.m4a",
+    "output_path": "/data/output/out.mp4"
+  }'
+```
+
+### 4.1) 提交 m4a -> wav 转换任务（异步）
+
+```bash
+curl -X POST http://127.0.0.1:8888/api/v1/audio/m4a-to-wav \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "input_path": "/data/input/audio.m4a",
+    "output_path": "/data/input/audio.wav"
+  }'
+```
+
+然后通过任务接口轮询状态：
+
+```bash
+curl "http://127.0.0.1:8888/api/v1/task?task_id=task_xxx"
+```
+
+> 该接口内部使用 FFmpeg C API 完成解码/重采样/编码，不依赖 shell 命令调用。
+
+### 4.2) 提交 ass 字幕嵌入 mp4 任务（异步，FFmpeg C API）
+
+```bash
+curl -X POST http://127.0.0.1:8888/api/v1/subtitle/ass-to-mp4 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "video_path": "/data/input/video.mp4",
+    "subtitle_path": "/data/input/subtitle.ass",
+    "output_path": "/data/output/video.with_sub.mp4"
+  }'
+```
+
+然后通过任务接口轮询状态：
+
+```bash
+curl "http://127.0.0.1:8888/api/v1/task?task_id=task_xxx"
+```
+
+### 4.3) 提交 音频+视频+ASS 一次性合并任务（异步，FFmpeg C API）
+
+```bash
+curl -X POST http://127.0.0.1:8888/api/v1/compose \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "video_path": "/data/input/video.mp4",
+    "audio_path": "/data/input/audio.m4a",
+    "subtitle_path": "/data/input/subtitle.ass",
+    "output_path": "/data/output/final.with_sub.mp4"
+  }'
+```
+
+然后通过任务接口轮询状态：
+
+```bash
+curl "http://127.0.0.1:8888/api/v1/task?task_id=task_xxx"
+```
+
+### 5) 查询任务状态
+
+```bash
+curl "http://127.0.0.1:8888/api/v1/task?task_id=task_xxx"
+```
+
+### 5.2) 一键端到端自测脚本
+
+仓库内置 `scripts/e2e_local.sh`，默认会按下面顺序执行：
+
+1. `docker compose up --build -d`
+2. `GET /healthz`
+3. `POST /api/v1/merge` + 轮询 `GET /api/v1/task`
+4. `ffmpeg` 转 wav（16k/mono）
+5. `POST /api/v1/asr` + 轮询 `GET /api/v1/task`
+6. 校验 `/data/output/out.mp4` 与 `/data/output/audio.en.srt`
+
+运行方式：
+
+```bash
+bash scripts/e2e_local.sh
+```
+
+可选变量（按需覆盖）：`BASE_URL`、`MODEL_NAME`、`LANGUAGE`、`MAX_RETRIES`、`SLEEP_SECONDS`。
+
+
+### 5.1) 音频识别生成字幕（whisper.cpp C API）
+
+先把输入音频转成 WAV（`pcm_s16le`, mono, 16kHz）：
+
+```bash
+ffmpeg -y -i data/input/audio.m4a -ar 16000 -ac 1 -c:a pcm_s16le data/input/audio.wav
+```
+
+然后提交识别任务：
+
+```bash
+curl -X POST http://127.0.0.1:8888/api/v1/asr \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "audio_path": "/data/input/audio.wav",
+    "subtitle_path": "/data/output/audio.en.srt",
+    "model_dir": "/models/whisper",
+    "model_name": "ggml-base.en.bin",
+    "language": "en"
+  }'
+```
+
+> 当前 ASR 模块直接走 whisper.cpp C API。音频输入要求 WAV (`pcm_s16le`, mono, 16kHz)。
+
+
+---
+
+### 6) 一键更新（含健康检查与自动回滚）
+
+
+### 6.1) 自动更新 av-service Docker 镜像
+
+```bash
+chmod +x scripts/update_av_service_image.sh
+AV_SERVICE_IMAGE=ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest \
+  ./scripts/update_av_service_image.sh
+```
+
+该脚本会自动执行：`docker pull` -> `docker compose up -d` -> 健康检查。
+
+
+```bash
+chmod +x scripts/deploy_update.sh scripts/rollback_last.sh
+LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) ./scripts/deploy_update.sh
 ```
 
 可选环境变量：
 
-- `APP_IMAGE`：默认 `ghcr.io/cipfz/youtobe-parser:latest`
-- `GHCR_USERNAME` / `GHCR_TOKEN`：私有镜像拉取时需要
+- `SERVICE_NAME`（默认 `av-service`）
+- `LOCAL_UID` / `LOCAL_GID`（默认当前用户 uid/gid）
+- `HEALTH_URL`（默认 `http://127.0.0.1:8888/healthz`）
+- `MAX_RETRIES`（默认 `30`）
+- `SLEEP_SECONDS`（默认 `2`）
 
-示例：
+如果需要手工回滚到某个镜像版本：
 
 ```bash
-GHCR_USERNAME=yourname \
-GHCR_TOKEN=ghp_xxx \
-APP_IMAGE=ghcr.io/cipfz/youtobe-parser:latest \
-COMPOSE_PROFILES=pot \
-bash scripts/update-container.sh
+./scripts/rollback_last.sh ghcr.io/cipfz/youtobe-workflow/av-service:sha-<commit>
+```
+
+
+
+## Docker 镜像自动构建并发布（推荐）
+
+我已经新增 GitHub Actions：`.github/workflows/docker-av-service.yml`，会在 `main` 分支 push 后自动构建并发布镜像到 **GHCR**（GitHub Container Registry）。
+
+镜像地址：
+
+- `ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest`
+- `ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:sha-<commit>`
+
+> 该工作流**仅在仓库 Secrets 配置 `GHCR_TOKEN`**（PAT，需包含 `write:packages`）时才会 push 到 GHCR；未配置时自动降级为仅 build（不 push），以避免 `permission_denied: write_package`。
+
+本地服务器更新命令：
+
+```bash
+docker login ghcr.io
+docker pull ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest
+docker rm -f av-service || true
+docker run -d --name av-service \
+  -p 8888:8888 \
+  -v $(pwd)/data/input:/data/input \
+  -v $(pwd)/data/output:/data/output \
+  -v $(pwd)/models/whisper:/models/whisper \
+  ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest
+```
+
+如果你更喜欢 compose，可以把 `docker-compose.yml` 的 `image` 改成上面的 GHCR 镜像，然后：
+
+```bash
+docker compose pull
+docker compose up -d
 ```
 
 ---
 
-## 常见问题
+## GitHub Workflow 自动构建（无需本地编译）
 
-### 1) 翻译没有变中文
+- 工作流文件：`.github/workflows/server-ci.yml`
+- 触发方式：
+  - push 到 `main`
+  - 对 `main` 发起 PR
+  - Actions 页面手工点击 `Run workflow`
 
-如果 `OPENAI_API_KEY` 为空，系统会跳过 LLM 调用并保留原文。
+工作流两个档位：
+1. `fallback`：关闭 workflow/ffmpeg 依赖，用于基础链路兜底验证。
+2. `full`：安装并编译 `sogou/workflow` + FFmpeg 开发库，构建真实可运行服务。
 
-### 2) Redis 连接失败
+`fallback` 的目的：
+- 防止第三方依赖源波动导致 CI 完全不可用。
+- 快速定位“代码问题”与“依赖环境问题”。
 
-服务会回退到内存任务存储（重启后任务会丢失），建议生产环境确保 Redis 可用。
-
-### 3) 无法访问 YouTube
-
-请配置 `GLOBAL_PROXY`，并按需接入 `PO_TOKEN_SERVER`。
+`full` 档位会上传发布包：`av-service-full.tar.gz`（包含可执行文件、依赖库、`run.sh`）。
 
 ---
 
-## License
+## 本地（可选）
 
-仅供学习与个人项目使用，请遵守 YouTube 及相关服务条款。
-
-
-> Troubleshooting: If pot-provider logs `protocol mismatch`, set `POT_PROXY` to a valid **HTTP/HTTPS** proxy or leave it empty.
-
-
-> If pot-provider is slow to mint token, increase `PO_TOKEN_TIMEOUT_SECONDS` (e.g. 45~90).
-
-
-For local debugging, pot-provider is exposed on host port `4416`, so you can test it with:
+如果你临时想本地验证，才需要执行：
 
 ```bash
-curl http://127.0.0.1:4416/health
+cmake -S server -B server/build
+cmake --build server/build -j
+ctest --test-dir server/build --output-on-failure
 ```
 
-
-If YouTube still returns "Sign in to confirm you're not a bot", provide exported cookies via `YOUTUBE_COOKIE_FILE` (Netscape format).
-
-If logs show `Unable to download API page: timed out`, increase `YT_DLP_SOCKET_TIMEOUT_SECONDS` (for example 30~60) and retry.
-
-With Docker Compose, `./data/secrets` is mounted to `/app/secrets` in the app container. A typical setup is:
-
-```bash
-mkdir -p data/secrets
-# put your exported Netscape cookies file into ./data/secrets
-# then set in .env:
-YOUTUBE_COOKIE_FILE=/app/secrets/youtube_cookies.txt
-```
+> 若本机未安装 workflow/FFmpeg 开发库，项目会进入 fallback 编译模式。
