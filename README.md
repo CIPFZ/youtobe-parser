@@ -153,6 +153,18 @@ curl -X POST http://127.0.0.1:8888/api/v1/asr \
 
 ### 6) 一键更新（含健康检查与自动回滚）
 
+
+### 6.1) 自动更新 av-service Docker 镜像
+
+```bash
+chmod +x scripts/update_av_service_image.sh
+AV_SERVICE_IMAGE=ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest \
+  ./scripts/update_av_service_image.sh
+```
+
+该脚本会自动执行：`docker pull` -> `docker compose up -d` -> 健康检查。
+
+
 ```bash
 chmod +x scripts/deploy_update.sh scripts/rollback_last.sh
 LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) ./scripts/deploy_update.sh
@@ -176,12 +188,14 @@ LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) ./scripts/deploy_update.sh
 
 ## Docker 镜像自动构建并发布（推荐）
 
-我已经新增 GitHub Actions：`.github/workflows/docker-publish.yml`，会在 `main` 分支 push 后自动构建并发布镜像到 **GHCR**（GitHub Container Registry）。
+我已经新增 GitHub Actions：`.github/workflows/docker-av-service.yml`，会在 `main` 分支 push 后自动构建并发布镜像到 **GHCR**（GitHub Container Registry）。
 
 镜像地址：
 
 - `ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest`
 - `ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:sha-<commit>`
+
+> 该工作流**仅在仓库 Secrets 配置 `GHCR_TOKEN`**（PAT，需包含 `write:packages`）时才会 push 到 GHCR；未配置时自动降级为仅 build（不 push），以避免 `permission_denied: write_package`。
 
 本地服务器更新命令：
 
