@@ -6,7 +6,7 @@
 using namespace avsvc;
 
 int main() {
-    TaskManager manager;
+    TaskManager manager(":memory:");
 
     bool reused = false;
     std::string t1 = manager.create_or_reuse("fp1", "v1.mp4", "a1.m4a", "o1.mp4", &reused);
