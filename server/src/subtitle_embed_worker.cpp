@@ -16,6 +16,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
+#include <libavutil/error.h>
 }
 #endif
 
@@ -147,9 +148,17 @@ int SubtitleEmbedWorker::run_ass_to_mp4(const std::string& video_path,
     }
 
     enc_ctx->time_base = AVRational{1, 1000};
-    if (avcodec_open2(enc_ctx, sub_enc, nullptr) < 0) {
+    enc_ctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
+    if (out_fmt->oformat->flags & AVFMT_GLOBALHEADER) {
+        enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    }
+
+    const int open_ret = avcodec_open2(enc_ctx, sub_enc, nullptr);
+    if (open_ret < 0) {
+        char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+        av_strerror(open_ret, errbuf, sizeof(errbuf));
         cleanup(&video_in, &sub_in, &out_fmt, &dec_ctx, &enc_ctx, &vpkt, &spkt, &out_pkt);
-        if (on_progress) on_progress(0, "failed: open mov_text encoder");
+        if (on_progress) on_progress(0, std::string("failed: open mov_text encoder: ") + errbuf);
         return -9;
     }
 

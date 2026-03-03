@@ -7,7 +7,7 @@
 using namespace avsvc;
 
 int main() {
-    TaskManager manager;
+    TaskManager manager(":memory:");
     MergeWorker worker;
 
     bool reused = false;
