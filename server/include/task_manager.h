@@ -4,7 +4,8 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <unordered_map>
+
+struct sqlite3;
 
 namespace avsvc {
 
@@ -31,6 +32,12 @@ struct TaskRecord {
 
 class TaskManager {
 public:
+    explicit TaskManager(const std::string& db_path = "task_manager.db");
+    ~TaskManager();
+
+    TaskManager(const TaskManager&) = delete;
+    TaskManager& operator=(const TaskManager&) = delete;
+
     std::string create_or_reuse(const std::string& fingerprint,
                                 const std::string& video_path,
                                 const std::string& audio_path,
@@ -42,11 +49,14 @@ public:
 
 private:
     static std::string now_id();
+    static int64_t now_ms();
+    static TaskStatus status_from_int(int value);
+
+    void init_schema();
 
 private:
     mutable std::mutex mu_;
-    std::unordered_map<std::string, TaskRecord> tasks_;
-    std::unordered_map<std::string, std::string> fingerprint_index_;
+    sqlite3* db_{nullptr};
 };
 
 std::string to_string(TaskStatus status);

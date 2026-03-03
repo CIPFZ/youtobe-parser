@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(SQLite3 REQUIRED)
 
 option(ENABLE_WORKFLOW "Enable sogou/workflow integration" ON)
 option(ENABLE_FFMPEG "Enable FFmpeg libavformat/libavcodec integration" ON)
@@ -74,7 +75,7 @@ add_library(av_core
 
 target_include_directories(av_core PUBLIC include)
 
-target_link_libraries(av_core PUBLIC Threads::Threads)
+target_link_libraries(av_core PUBLIC Threads::Threads SQLite::SQLite3)
 
 if (WORKFLOW_READY)
   target_include_directories(av_core PUBLIC ${WORKFLOW_INCLUDE_DIR})
