@@ -16,7 +16,7 @@ from typing import Any
 
 import requests
 import yt_dlp
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from openai import OpenAI
 
 
@@ -82,6 +82,18 @@ def print_step(step: int, message: str) -> None:
 
 BASE_URL = "http://127.0.0.1:8888/api/v1"
 SRT_TIME_RE = re.compile(r"(\d{2}:\d{2}:\d{2}[\.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[\.,]\d{3})")
+
+
+def _load_runtime_env(env_file: str) -> dict[str, str]:
+    file_vars = {k: v for k, v in dotenv_values(env_file).items() if isinstance(v, str)}
+    merged = dict(file_vars)
+    for k, v in os.environ.items():
+        merged[k] = v
+    return merged
+
+
+def _env_get(env: dict[str, str], key: str, default: str = "") -> str:
+    return env.get(key, default)
 
 
 def convert_m4a_to_wav(input_path: str, output_path: str) -> dict[str, Any] | None:
@@ -223,7 +235,14 @@ def _translate_batch(client: OpenAI, model: str, texts: list[str]) -> list[str]:
     return [mapped.get(i, t) for i, t in enumerate(texts)]
 
 
-def translate_srt_to_ass(srt_path: str, ass_path: str, logger: logging.Logger, model: str) -> None:
+def translate_srt_to_ass(
+    srt_path: str,
+    ass_path: str,
+    logger: logging.Logger,
+    model: str,
+    api_key: str,
+    base_url: str | None,
+) -> None:
     with open(srt_path, "r", encoding="utf-8") as f:
         lines = [ln.rstrip("\n") for ln in f.readlines()]
 
@@ -256,13 +275,12 @@ def translate_srt_to_ass(srt_path: str, ass_path: str, logger: logging.Logger, m
     if not subtitle_rows:
         raise RuntimeError(f"未解析到字幕内容: {srt_path}")
 
-    api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY 未设置（可在 .env 中配置），无法执行 Step6 翻译")
 
     client = OpenAI(
         api_key=api_key,
-        base_url=os.environ.get("OPENAI_BASE_URL") or None,
+        base_url=base_url or None,
     )
 
     translated: list[str] = []
@@ -311,15 +329,17 @@ def main() -> None:
     parser.add_argument("--asr-language", default=None, help="ASR language code (override .env)")
     args = parser.parse_args()
 
-    load_dotenv(args.env_file)
+    env = _load_runtime_env(args.env_file)
 
     global BASE_URL
-    BASE_URL = os.environ.get("AV_API_BASE_URL", BASE_URL)
+    BASE_URL = _env_get(env, "AV_API_BASE_URL", BASE_URL)
 
-    openai_model = args.openai_model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-    whisper_model_dir = args.whisper_model_dir or os.environ.get("WHISPER_MODEL_DIR", "/models/whisper")
-    whisper_model_name = args.whisper_model_name or os.environ.get("WHISPER_MODEL_NAME", "ggml-base.en.bin")
-    asr_language = args.asr_language or os.environ.get("ASR_LANGUAGE", "en")
+    openai_api_key = _env_get(env, "OPENAI_API_KEY", "")
+    openai_base_url = _env_get(env, "OPENAI_BASE_URL", "")
+    openai_model = args.openai_model or _env_get(env, "OPENAI_MODEL", "gpt-4o-mini")
+    whisper_model_dir = args.whisper_model_dir or _env_get(env, "WHISPER_MODEL_DIR", "/models/whisper")
+    whisper_model_name = args.whisper_model_name or _env_get(env, "WHISPER_MODEL_NAME", "ggml-base.en.bin")
+    asr_language = args.asr_language or _env_get(env, "ASR_LANGUAGE", "en")
 
     Path("data/input").mkdir(parents=True, exist_ok=True)
     Path("data/output").mkdir(parents=True, exist_ok=True)
@@ -332,8 +352,8 @@ def main() -> None:
     output_path.mkdir(parents=True, exist_ok=True)
 
     base_opts: dict[str, Any] = {
-        "proxy": args.proxy if args.proxy is not None else (os.environ.get("GLOBAL_PROXY") or None),
-        "cookiefile": args.cookie_file if args.cookie_file is not None else (os.environ.get("YOUTUBE_COOKIE_FILE") or None),
+        "proxy": args.proxy if args.proxy is not None else (_env_get(env, "GLOBAL_PROXY") or None),
+        "cookiefile": args.cookie_file if args.cookie_file is not None else (_env_get(env, "YOUTUBE_COOKIE_FILE") or None),
         "socket_timeout": args.timeout,
     }
     base_opts = {k: v for k, v in base_opts.items() if v is not None}
@@ -438,7 +458,14 @@ def main() -> None:
         logger.error("Step6 失败，SRT 文件不存在: %s", srt_file)
         raise FileNotFoundError(f"SRT file not found: {srt_file}")
 
-    translate_srt_to_ass(srt_file, ass_file, logger, model=openai_model)
+    translate_srt_to_ass(
+        srt_file,
+        ass_file,
+        logger,
+        model=openai_model,
+        api_key=openai_api_key,
+        base_url=openai_base_url or None,
+    )
     logger.info("Step6 完成，ASS 输出: %s", ass_file)
 
     print_step(7, "Composing mp4 + m4a + ass via C++ API...")
