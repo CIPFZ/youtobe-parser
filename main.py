@@ -9,6 +9,7 @@ import logging
 import os
 import os.path
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -175,6 +176,49 @@ def get_task_status(task_id: str) -> dict[str, Any] | None:
     except requests.exceptions.RequestException as e:
         print(f"查询失败: {e}")
         return None
+
+
+
+
+def probe_stream_types(path: str) -> set[str]:
+    try:
+        rsp = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=codec_type",
+                "-of",
+                "json",
+                path,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        data = json.loads(rsp.stdout or "{}")
+        return {str(st.get("codec_type", "")) for st in data.get("streams", []) if st.get("codec_type")}
+    except Exception:
+        return set()
+
+
+def ensure_av_streams(path: str, require_video: bool, require_audio: bool, logger: logging.Logger) -> None:
+    stream_types = probe_stream_types(path)
+    if not stream_types:
+        logger.warning("ffprobe 不可用或探测失败，跳过流校验: %s", path)
+        return
+
+    missing: list[str] = []
+    if require_video and "video" not in stream_types:
+        missing.append("video")
+    if require_audio and "audio" not in stream_types:
+        missing.append("audio")
+
+    if missing:
+        raise RuntimeError(
+            f"媒体流校验失败: {path} 缺少 {','.join(missing)}，当前流={sorted(stream_types)}"
+        )
 
 
 def _build_asr_model_hint(model_dir: str, model_name: str) -> str:
@@ -490,6 +534,9 @@ def main() -> None:
     subtitle_abs = f"/data/input/{vid}/{vid}.ass"
     output_abs = f"/data/output/{vid}.final.mp4"
 
+    ensure_av_streams(video_abs, require_video=True, require_audio=False, logger=logger)
+    ensure_av_streams(audio_abs, require_video=False, require_audio=True, logger=logger)
+
     compose_res = compose_video(video_abs, audio_abs, subtitle_abs, output_abs)
     compose_task_id = compose_res.get("task_id") if compose_res else None
     if not compose_task_id:
@@ -499,6 +546,7 @@ def main() -> None:
     try:
         compose_info = wait_for_task(compose_task_id, logger)
         logger.info("Step7 合成任务成功: %s", compose_info)
+        ensure_av_streams(output_abs, require_video=True, require_audio=True, logger=logger)
     except RuntimeError as exc:
         msg = str(exc)
         if "open mov_text encoder" not in msg:
@@ -514,6 +562,7 @@ def main() -> None:
 
         merge_info = wait_for_task(merge_task_id, logger)
         logger.info("Step7 回退 merge 任务成功: %s", merge_info)
+        ensure_av_streams(fallback_output_abs, require_video=True, require_audio=True, logger=logger)
         output_abs = fallback_output_abs
 
     print_step(8, f"全部流程完成: {output_abs}")
