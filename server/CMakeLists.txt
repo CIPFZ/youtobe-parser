@@ -53,9 +53,11 @@ endif()
 
 set(FFMPEG_READY OFF)
 if (ENABLE_FFMPEG)
-  pkg_check_modules(FFMPEG IMPORTED_TARGET libavformat libavcodec libavutil libswresample libavfilter)
+  # 添加了 REQUIRED，确保找不到时直接中断构建，而不是带着残缺环境去编译
+  pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswresample libavfilter)
   if (FFMPEG_FOUND)
     message(STATUS "Found FFmpeg via pkg-config")
+    message(STATUS "FFmpeg Include Dirs: ${FFMPEG_INCLUDE_DIRS}")
     set(FFMPEG_READY ON)
     add_compile_definitions(HAVE_FFMPEG=1)
   else()
@@ -88,6 +90,8 @@ if (WHISPERCPP_READY)
 endif()
 
 if (FFMPEG_READY)
+  # 显式包含 pkg-config 找到的所有 FFmpeg 头文件目录
+  target_include_directories(av_core PUBLIC ${FFMPEG_INCLUDE_DIRS})
   target_link_libraries(av_core PUBLIC PkgConfig::FFMPEG)
 endif()
 
