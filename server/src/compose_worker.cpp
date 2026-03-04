@@ -1,25 +1,24 @@
 #include "compose_worker.h"
 
-#include <algorithm>
-#include <chrono>
-#include <cstdint>
-#include <cstring>
-#include <filesystem>
-#include <functional>
-#include <limits>
+#include <iostream>
 #include <sstream>
-#include <string>
-#include <thread>
+#include <filesystem>
 #include <vector>
+#include <algorithm>
 
-#ifdef HAVE_FFMPEG
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-#include <libavutil/avutil.h>
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
+#include <libavfilter/avfilter.h>
+#include <libavutil/opt.h>
+#include <libavutil/pixdesc.h>
 #include <libavutil/error.h>
 }
-#endif
+
+#define LOG_INF(msg) std::cout << "[ComposeWorker][INFO] " << msg << std::endl
+#define LOG_ERR(msg) std::cerr << "[ComposeWorker][ERROR] " << msg << std::endl
 
 namespace avsvc {
 
@@ -27,343 +26,291 @@ std::string build_compose_fingerprint(const std::string& video_path,
                                       const std::string& audio_path,
                                       const std::string& subtitle_path,
                                       const std::string& output_path) {
-    const auto key = "compose|" + video_path + "|" + audio_path + "|" + subtitle_path + "|" + output_path;
+    const auto key = "hardsub_compose|" + video_path + "|" + audio_path + "|" + subtitle_path + "|" + output_path;
     const auto hashed = std::hash<std::string>{}(key);
     std::ostringstream oss;
     oss << std::hex << hashed;
     return oss.str();
 }
 
-#ifdef HAVE_FFMPEG
-namespace {
-
-void cleanup(AVFormatContext** video_in,
-             AVFormatContext** audio_in,
-             AVFormatContext** sub_in,
-             AVFormatContext** out_fmt,
-             AVCodecContext** sub_dec_ctx,
-             AVCodecContext** sub_enc_ctx,
-             AVPacket** vpkt,
-             AVPacket** apkt,
-             AVPacket** spkt,
-             AVPacket** out_spkt) {
-    if (vpkt && *vpkt) av_packet_free(vpkt);
-    if (apkt && *apkt) av_packet_free(apkt);
-    if (spkt && *spkt) av_packet_free(spkt);
-    if (out_spkt && *out_spkt) av_packet_free(out_spkt);
-    if (sub_dec_ctx && *sub_dec_ctx) avcodec_free_context(sub_dec_ctx);
-    if (sub_enc_ctx && *sub_enc_ctx) avcodec_free_context(sub_enc_ctx);
-
-    if (out_fmt && *out_fmt) {
-        if (!((*out_fmt)->oformat->flags & AVFMT_NOFILE)) {
-            avio_closep(&(*out_fmt)->pb);
-        }
-        avformat_free_context(*out_fmt);
-        *out_fmt = nullptr;
-    }
-    if (sub_in && *sub_in) avformat_close_input(sub_in);
-    if (audio_in && *audio_in) avformat_close_input(audio_in);
-    if (video_in && *video_in) avformat_close_input(video_in);
-}
-
-int64_t ts_us(int64_t ts, AVRational tb) {
-    if (ts == AV_NOPTS_VALUE) return 0;
-    return av_rescale_q(ts, tb, AVRational{1, AV_TIME_BASE});
-}
-
-}  // namespace
-#endif
-
 int ComposeWorker::run(const std::string& video_path,
                        const std::string& audio_path,
                        const std::string& subtitle_path,
                        const std::string& output_path,
                        ComposeProgressCallback on_progress) const {
-    if (!std::filesystem::exists(video_path) ||
-        !std::filesystem::exists(audio_path) ||
-        !std::filesystem::exists(subtitle_path)) {
-        if (on_progress) on_progress(0, "failed: video/audio/subtitle file not found");
+    
+    LOG_INF("Starting hardsub compose task...");
+    LOG_INF("Video: " << video_path);
+    LOG_INF("Audio: " << audio_path);
+    LOG_INF("Subtitle: " << subtitle_path);
+    LOG_INF("Output: " << output_path);
+
+    if (!std::filesystem::exists(video_path) || !std::filesystem::exists(audio_path) || !std::filesystem::exists(subtitle_path)) {
+        LOG_ERR("Input files missing.");
+        if (on_progress) on_progress(0, "failed: input file(s) not found");
         return -1;
     }
 
-#ifdef HAVE_FFMPEG
-    AVFormatContext* video_in = nullptr;
-    AVFormatContext* audio_in = nullptr;
-    AVFormatContext* sub_in = nullptr;
-    AVFormatContext* out_fmt = nullptr;
-    AVCodecContext* sub_dec_ctx = nullptr;
-    AVCodecContext* sub_enc_ctx = nullptr;
-    AVPacket* vpkt = nullptr;
-    AVPacket* apkt = nullptr;
-    AVPacket* spkt = nullptr;
-    AVPacket* out_spkt = nullptr;
+    int ret = 0;
+    AVFormatContext *ifmt_ctx_v = nullptr, *ifmt_ctx_a = nullptr, *ofmt_ctx = nullptr;
+    AVCodecContext *dec_ctx = nullptr, *enc_ctx = nullptr;
+    AVFilterGraph *filter_graph = nullptr;
+    AVFilterContext *buffersink_ctx = nullptr, *buffersrc_ctx = nullptr;
+    AVPacket *pkt = nullptr, *enc_pkt = nullptr, *audio_pkt = nullptr;
+    AVFrame *frame = nullptr, *filt_frame = nullptr;
+    
+    int video_stream_idx = -1, audio_stream_idx = -1;
+    int out_video_idx = -1, out_audio_idx = -1;
+    
+    int64_t v_pts_us = 0, a_pts_us = 0;
+    bool video_eof = false, audio_eof = false, decode_eof = false;
 
-    if (on_progress) on_progress(5, "opening inputs");
-
-    if (avformat_open_input(&video_in, video_path.c_str(), nullptr, nullptr) < 0 ||
-        avformat_find_stream_info(video_in, nullptr) < 0) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: open video input");
-        return -2;
+    // 1. 打开视频输入
+    LOG_INF("Opening video input...");
+    if ((ret = avformat_open_input(&ifmt_ctx_v, video_path.c_str(), nullptr, nullptr)) < 0) {
+        LOG_ERR("Cannot open video input.");
+        goto end;
     }
-    if (avformat_open_input(&audio_in, audio_path.c_str(), nullptr, nullptr) < 0 ||
-        avformat_find_stream_info(audio_in, nullptr) < 0) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: open audio input");
-        return -3;
+    avformat_find_stream_info(ifmt_ctx_v, nullptr);
+    video_stream_idx = av_find_best_stream(ifmt_ctx_v, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    
+    // 2. 打开音频输入
+    LOG_INF("Opening audio input...");
+    if ((ret = avformat_open_input(&ifmt_ctx_a, audio_path.c_str(), nullptr, nullptr)) < 0) {
+        LOG_ERR("Cannot open audio input.");
+        goto end;
     }
-    if (avformat_open_input(&sub_in, subtitle_path.c_str(), nullptr, nullptr) < 0 ||
-        avformat_find_stream_info(sub_in, nullptr) < 0) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: open subtitle input");
-        return -4;
-    }
+    avformat_find_stream_info(ifmt_ctx_a, nullptr);
+    audio_stream_idx = av_find_best_stream(ifmt_ctx_a, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
 
-    const int v_idx = av_find_best_stream(video_in, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
-    const int a_idx = av_find_best_stream(audio_in, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
-    const int s_idx = av_find_best_stream(sub_in, AVMEDIA_TYPE_SUBTITLE, -1, -1, nullptr, 0);
-    if (v_idx < 0 || a_idx < 0 || s_idx < 0) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: missing video/audio/subtitle stream");
-        return -5;
-    }
+    // 3. 打开输出容器
+    LOG_INF("Allocating output context...");
+    avformat_alloc_output_context2(&ofmt_ctx, nullptr, nullptr, output_path.c_str());
+    if (!ofmt_ctx) { ret = -1; goto end; }
 
-    if (avformat_alloc_output_context2(&out_fmt, nullptr, "mp4", output_path.c_str()) < 0 || !out_fmt) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: alloc output mp4");
-        return -6;
-    }
-
-    AVStream* in_v = video_in->streams[v_idx];
-    AVStream* in_a = audio_in->streams[a_idx];
-
-    AVStream* out_v = avformat_new_stream(out_fmt, nullptr);
-    AVStream* out_a = avformat_new_stream(out_fmt, nullptr);
-    if (!out_v || !out_a ||
-        avcodec_parameters_copy(out_v->codecpar, in_v->codecpar) < 0 ||
-        avcodec_parameters_copy(out_a->codecpar, in_a->codecpar) < 0) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: create/copy AV output streams");
-        return -7;
-    }
-    out_v->codecpar->codec_tag = 0;
-    out_a->codecpar->codec_tag = 0;
-    out_v->time_base = in_v->time_base;
-    out_a->time_base = in_a->time_base;
-
-    AVStream* in_s = sub_in->streams[s_idx];
-    const AVCodec* sub_dec = avcodec_find_decoder(in_s->codecpar->codec_id);
-    const AVCodec* sub_enc = avcodec_find_encoder(AV_CODEC_ID_MOV_TEXT);
-    if (!sub_dec || !sub_enc) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: subtitle decoder/encoder not found");
-        return -8;
+    // 4. 配置视频解码器
+    {
+        AVStream *in_v_stream = ifmt_ctx_v->streams[video_stream_idx];
+        const AVCodec *dec = avcodec_find_decoder(in_v_stream->codecpar->codec_id);
+        dec_ctx = avcodec_alloc_context3(dec);
+        avcodec_parameters_to_context(dec_ctx, in_v_stream->codecpar);
+        avcodec_open2(dec_ctx, dec, nullptr);
+        LOG_INF("Video decoder opened.");
     }
 
-    sub_dec_ctx = avcodec_alloc_context3(sub_dec);
-    sub_enc_ctx = avcodec_alloc_context3(sub_enc);
-    if (!sub_dec_ctx || !sub_enc_ctx ||
-        avcodec_parameters_to_context(sub_dec_ctx, in_s->codecpar) < 0 ||
-        avcodec_open2(sub_dec_ctx, sub_dec, nullptr) < 0) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: open subtitle decoder");
-        return -9;
+    // 5. 配置视频编码器 (libx264)
+    {
+        const AVCodec *enc = avcodec_find_encoder_by_name("libx264");
+        if (!enc) { LOG_ERR("libx264 not found!"); ret = -1; goto end; }
+        enc_ctx = avcodec_alloc_context3(enc);
+        enc_ctx->height = dec_ctx->height;
+        enc_ctx->width = dec_ctx->width;
+        enc_ctx->sample_aspect_ratio = dec_ctx->sample_aspect_ratio;
+        enc_ctx->pix_fmt = AV_PIX_FMT_YUV420P; // 强制标准像素格式
+        enc_ctx->time_base = av_inv_q(dec_ctx->framerate);
+        
+        if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
+            enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+            
+        // 性能优化：使用 fast 预设降低 CPU 占用，crf=23 保证质量
+        av_opt_set(enc_ctx->priv_data, "preset", "fast", 0);
+        av_opt_set(enc_ctx->priv_data, "crf", "23", 0);
+        
+        if ((ret = avcodec_open2(enc_ctx, enc, nullptr)) < 0) {
+            LOG_ERR("Cannot open video encoder.");
+            goto end;
+        }
+        
+        AVStream *out_v_stream = avformat_new_stream(ofmt_ctx, nullptr);
+        out_video_idx = out_v_stream->index;
+        avcodec_parameters_from_context(out_v_stream->codecpar, enc_ctx);
+        out_v_stream->time_base = enc_ctx->time_base;
+        LOG_INF("Video encoder libx264 configured.");
     }
 
-    sub_enc_ctx->time_base = AVRational{1, 1000};
-    sub_enc_ctx->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
-    if (out_fmt->oformat->flags & AVFMT_GLOBALHEADER) {
-        sub_enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    // 6. 配置音频输出流 (Stream Copy)
+    {
+        AVStream *in_a_stream = ifmt_ctx_a->streams[audio_stream_idx];
+        AVStream *out_a_stream = avformat_new_stream(ofmt_ctx, nullptr);
+        out_audio_idx = out_a_stream->index;
+        avcodec_parameters_copy(out_a_stream->codecpar, in_a_stream->codecpar);
+        out_a_stream->codecpar->codec_tag = 0;
+        out_a_stream->time_base = in_a_stream->time_base;
+        LOG_INF("Audio output stream configured for copying.");
     }
 
-    const int open_ret = avcodec_open2(sub_enc_ctx, sub_enc, nullptr);
-    if (open_ret < 0) {
-        char errbuf[AV_ERROR_MAX_STRING_SIZE] = {0};
-        av_strerror(open_ret, errbuf, sizeof(errbuf));
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, std::string("failed: open mov_text encoder: ") + errbuf);
-        return -10;
+    // 7. 配置滤镜图 (Filter Graph: buffer -> ass -> buffersink)
+    {
+        LOG_INF("Setting up subtitle filter graph...");
+        filter_graph = avfilter_graph_alloc();
+        const AVFilter *buffersrc  = avfilter_get_by_name("buffer");
+        const AVFilter *buffersink = avfilter_get_by_name("buffersink");
+
+        char args[512];
+        AVStream *in_v_stream = ifmt_ctx_v->streams[video_stream_idx];
+        snprintf(args, sizeof(args),
+                 "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+                 dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt,
+                 in_v_stream->time_base.num, in_v_stream->time_base.den,
+                 dec_ctx->sample_aspect_ratio.num, dec_ctx->sample_aspect_ratio.den);
+
+        avfilter_graph_create_filter(&buffersrc_ctx, buffersrc, "in", args, nullptr, filter_graph);
+        avfilter_graph_create_filter(&buffersink_ctx, buffersink, "out", nullptr, nullptr, filter_graph);
+        
+        enum AVPixelFormat pix_fmts[] = { enc_ctx->pix_fmt, AV_PIX_FMT_NONE };
+        av_opt_set_int_list(buffersink_ctx, "pix_fmts", pix_fmts, AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
+
+        AVFilterInOut *outputs = avfilter_inout_alloc();
+        AVFilterInOut *inputs  = avfilter_inout_alloc();
+        outputs->name       = av_strdup("in");
+        outputs->filter_ctx = buffersrc_ctx;
+        outputs->pad_idx    = 0;
+        outputs->next       = nullptr;
+        inputs->name       = av_strdup("out");
+        inputs->filter_ctx = buffersink_ctx;
+        inputs->pad_idx    = 0;
+        inputs->next       = nullptr;
+
+        // 构造 ass 滤镜参数
+        std::string filter_str = "ass='" + subtitle_path + "'";
+        if ((ret = avfilter_graph_parse_ptr(filter_graph, filter_str.c_str(), &inputs, &outputs, nullptr)) < 0) {
+            LOG_ERR("Cannot parse filter graph.");
+            goto end;
+        }
+        if ((ret = avfilter_graph_config(filter_graph, nullptr)) < 0) {
+            LOG_ERR("Cannot config filter graph.");
+            goto end;
+        }
+        avfilter_inout_free(&inputs);
+        avfilter_inout_free(&outputs);
+        LOG_INF("Filter graph created successfully.");
     }
 
-    AVStream* out_s = avformat_new_stream(out_fmt, nullptr);
-    if (!out_s || avcodec_parameters_from_context(out_s->codecpar, sub_enc_ctx) < 0) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: create output subtitle stream");
-        return -11;
+    // 8. 写入文件头
+    if (!(ofmt_ctx->oformat->flags & AVFMT_NOFILE)) {
+        if (avio_open(&ofmt_ctx->pb, output_path.c_str(), AVIO_FLAG_WRITE) < 0) {
+            LOG_ERR("Cannot open output file."); ret = -1; goto end;
+        }
     }
-    out_s->time_base = sub_enc_ctx->time_base;
-
-    if (!(out_fmt->oformat->flags & AVFMT_NOFILE) && avio_open(&out_fmt->pb, output_path.c_str(), AVIO_FLAG_WRITE) < 0) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: open output file");
-        return -12;
+    if ((ret = avformat_write_header(ofmt_ctx, nullptr)) < 0) {
+        LOG_ERR("Error occurred when opening output file."); goto end;
     }
 
-    if (avformat_write_header(out_fmt, nullptr) < 0) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: avformat_write_header");
-        return -13;
-    }
+    // 初始化包和帧
+    pkt = av_packet_alloc();
+    enc_pkt = av_packet_alloc();
+    audio_pkt = av_packet_alloc();
+    frame = av_frame_alloc();
+    filt_frame = av_frame_alloc();
+    
+    if (on_progress) on_progress(10, "starting hardsub process...");
 
-    vpkt = av_packet_alloc();
-    apkt = av_packet_alloc();
-    spkt = av_packet_alloc();
-    out_spkt = av_packet_alloc();
-    if (!vpkt || !apkt || !spkt || !out_spkt) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: alloc packets");
-        return -14;
-    }
-
-    bool has_v = false, end_v = false;
-    bool has_a = false, end_a = false;
-    bool has_s = false, end_s = false;
-
-    auto read_v = [&]() {
-        while (true) {
-            const int ret = av_read_frame(video_in, vpkt);
+    LOG_INF("Entering main processing loop...");
+    // 9. 主处理循环：交替读取视频和音频，以保证时间戳单调递增
+    while (!video_eof || !audio_eof) {
+        // 如果音频已经结束，或者视频进度落后于音频，且视频没结束，则处理视频
+        if (!video_eof && (audio_eof || v_pts_us <= a_pts_us)) {
+            ret = av_read_frame(ifmt_ctx_v, pkt);
             if (ret < 0) {
-                end_v = true;
-                return;
+                video_eof = true;
+                // 向解码器发送 EOF flush
+                avcodec_send_packet(dec_ctx, nullptr);
+            } else if (pkt->stream_index == video_stream_idx) {
+                avcodec_send_packet(dec_ctx, pkt);
             }
-            if (vpkt->stream_index == v_idx) {
-                has_v = true;
-                return;
+            av_packet_unref(pkt);
+
+            // 接收解码后的帧
+            while (avcodec_receive_frame(dec_ctx, frame) >= 0) {
+                // 送入滤镜图烧录字幕
+                av_buffersrc_add_frame_flags(buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF);
+                
+                while (av_buffersink_get_frame(buffersink_ctx, filt_frame) >= 0) {
+                    // 更新视频进度
+                    v_pts_us = av_rescale_q(filt_frame->pts, ifmt_ctx_v->streams[video_stream_idx]->time_base, {1, AV_TIME_BASE});
+                    
+                    // 送入编码器
+                    avcodec_send_frame(enc_ctx, filt_frame);
+                    while (avcodec_receive_packet(enc_ctx, enc_pkt) >= 0) {
+                        av_packet_rescale_ts(enc_pkt, enc_ctx->time_base, ofmt_ctx->streams[out_video_idx]->time_base);
+                        enc_pkt->stream_index = out_video_idx;
+                        av_interleaved_write_frame(ofmt_ctx, enc_pkt);
+                        av_packet_unref(enc_pkt);
+                    }
+                    av_frame_unref(filt_frame);
+                }
+                av_frame_unref(frame);
             }
-            av_packet_unref(vpkt);
-        }
-    };
-    auto read_a = [&]() {
-        while (true) {
-            const int ret = av_read_frame(audio_in, apkt);
+        } 
+        // 处理音频 (Stream Copy)
+        else if (!audio_eof) {
+            ret = av_read_frame(ifmt_ctx_a, audio_pkt);
             if (ret < 0) {
-                end_a = true;
-                return;
+                audio_eof = true;
+            } else if (audio_pkt->stream_index == audio_stream_idx) {
+                // 更新音频进度
+                a_pts_us = av_rescale_q(audio_pkt->pts, ifmt_ctx_a->streams[audio_stream_idx]->time_base, {1, AV_TIME_BASE});
+                
+                av_packet_rescale_ts(audio_pkt, ifmt_ctx_a->streams[audio_stream_idx]->time_base, ofmt_ctx->streams[out_audio_idx]->time_base);
+                audio_pkt->stream_index = out_audio_idx;
+                av_interleaved_write_frame(ofmt_ctx, audio_pkt);
             }
-            if (apkt->stream_index == a_idx) {
-                has_a = true;
-                return;
-            }
-            av_packet_unref(apkt);
+            av_packet_unref(audio_pkt);
         }
-    };
-    auto read_s = [&]() {
-        while (true) {
-            const int ret = av_read_frame(sub_in, spkt);
-            if (ret < 0) {
-                end_s = true;
-                return;
-            }
-            if (spkt->stream_index == s_idx) {
-                has_s = true;
-                return;
-            }
-            av_packet_unref(spkt);
+        
+        // 进度汇报 (假设视频更长，用视频进度计算)
+        if (on_progress && ifmt_ctx_v->duration > 0 && !video_eof) {
+            int p = 10 + (v_pts_us * 85 / ifmt_ctx_v->duration);
+            on_progress(std::min(95, std::max(10, p)), "hardsub encoding...");
         }
-    };
-
-    if (on_progress) on_progress(20, "composing streams");
-
-    while (true) {
-        if (!has_v && !end_v) read_v();
-        if (!has_a && !end_a) read_a();
-        if (!has_s && !end_s) read_s();
-        if (!has_v && !has_a && !has_s) break;
-
-        const int64_t v_us = has_v ? ts_us(vpkt->dts, in_v->time_base) : std::numeric_limits<int64_t>::max();
-        const int64_t a_us = has_a ? ts_us(apkt->dts, in_a->time_base) : std::numeric_limits<int64_t>::max();
-        const int64_t s_us = has_s ? ts_us(spkt->dts, in_s->time_base) : std::numeric_limits<int64_t>::max();
-
-        if (v_us <= a_us && v_us <= s_us) {
-            av_packet_rescale_ts(vpkt, in_v->time_base, out_v->time_base);
-            vpkt->stream_index = out_v->index;
-            if (av_interleaved_write_frame(out_fmt, vpkt) < 0) {
-                av_packet_unref(vpkt);
-                cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-                if (on_progress) on_progress(0, "failed: write video packet");
-                return -15;
-            }
-            av_packet_unref(vpkt);
-            has_v = false;
-        } else if (a_us <= v_us && a_us <= s_us) {
-            av_packet_rescale_ts(apkt, in_a->time_base, out_a->time_base);
-            apkt->stream_index = out_a->index;
-            if (av_interleaved_write_frame(out_fmt, apkt) < 0) {
-                av_packet_unref(apkt);
-                cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-                if (on_progress) on_progress(0, "failed: write audio packet");
-                return -16;
-            }
-            av_packet_unref(apkt);
-            has_a = false;
-        } else {
-            AVSubtitle sub{};
-            int got_sub = 0;
-            const int ret = avcodec_decode_subtitle2(sub_dec_ctx, &sub, &got_sub, spkt);
-            av_packet_unref(spkt);
-            has_s = false;
-            if (ret < 0 || !got_sub) {
-                continue;
-            }
-
-            std::vector<uint8_t> buf(64 * 1024);
-            const int enc_size = avcodec_encode_subtitle(sub_enc_ctx, buf.data(), static_cast<int>(buf.size()), &sub);
-            const int start = sub.start_display_time;
-            const int end = sub.end_display_time;
-            const int64_t pts_from_sub = sub.pts;
-            avsubtitle_free(&sub);
-
-            if (enc_size <= 0) {
-                continue;
-            }
-
-            av_packet_unref(out_spkt);
-            if (av_new_packet(out_spkt, enc_size) < 0) {
-                cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-                if (on_progress) on_progress(0, "failed: alloc subtitle packet");
-                return -17;
-            }
-            std::memcpy(out_spkt->data, buf.data(), static_cast<size_t>(enc_size));
-
-            const int64_t base_pts = (pts_from_sub == AV_NOPTS_VALUE) ? 0 : (pts_from_sub / 1000);
-            out_spkt->pts = base_pts + start;
-            out_spkt->dts = out_spkt->pts;
-            out_spkt->duration = std::max(1, end > start ? end - start : 1000);
-            out_spkt->stream_index = out_s->index;
-
-            if (av_interleaved_write_frame(out_fmt, out_spkt) < 0) {
-                av_packet_unref(out_spkt);
-                cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-                if (on_progress) on_progress(0, "failed: write subtitle packet");
-                return -18;
-            }
-            av_packet_unref(out_spkt);
-        }
-
-        if (on_progress) on_progress(80, "composing");
     }
 
-    if (av_write_trailer(out_fmt) < 0) {
-        cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
-        if (on_progress) on_progress(0, "failed: av_write_trailer");
-        return -19;
+    // 10. Flush filter and encoder
+    LOG_INF("Flushing filters and encoders...");
+    av_buffersrc_add_frame_flags(buffersrc_ctx, nullptr, 0);
+    while (av_buffersink_get_frame(buffersink_ctx, filt_frame) >= 0) {
+        avcodec_send_frame(enc_ctx, filt_frame);
+        while (avcodec_receive_packet(enc_ctx, enc_pkt) >= 0) {
+            av_packet_rescale_ts(enc_pkt, enc_ctx->time_base, ofmt_ctx->streams[out_video_idx]->time_base);
+            enc_pkt->stream_index = out_video_idx;
+            av_interleaved_write_frame(ofmt_ctx, enc_pkt);
+            av_packet_unref(enc_pkt);
+        }
+        av_frame_unref(filt_frame);
+    }
+    
+    // Flush encoder
+    avcodec_send_frame(enc_ctx, nullptr);
+    while (avcodec_receive_packet(enc_ctx, enc_pkt) >= 0) {
+        av_packet_rescale_ts(enc_pkt, enc_ctx->time_base, ofmt_ctx->streams[out_video_idx]->time_base);
+        enc_pkt->stream_index = out_video_idx;
+        av_interleaved_write_frame(ofmt_ctx, enc_pkt);
+        av_packet_unref(enc_pkt);
     }
 
-    cleanup(&video_in, &audio_in, &sub_in, &out_fmt, &sub_dec_ctx, &sub_enc_ctx, &vpkt, &apkt, &spkt, &out_spkt);
+    av_write_trailer(ofmt_ctx);
+    LOG_INF("Output file written successfully.");
     if (on_progress) on_progress(100, "done");
-    return 0;
-#else
-    (void)video_path;
-    (void)audio_path;
-    (void)subtitle_path;
-    (void)output_path;
+    ret = 0;
 
-    for (int p = 20; p <= 100; p += 20) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(80));
-        if (on_progress) on_progress(p, p == 100 ? "done" : "processing");
+end:
+    // 11. 完美的 RAII/Goto 资源释放，杜绝内存泄漏
+    LOG_INF("Cleaning up resources...");
+    if (pkt) av_packet_free(&pkt);
+    if (enc_pkt) av_packet_free(&enc_pkt);
+    if (audio_pkt) av_packet_free(&audio_pkt);
+    if (frame) av_frame_free(&frame);
+    if (filt_frame) av_frame_free(&filt_frame);
+    if (dec_ctx) avcodec_free_context(&dec_ctx);
+    if (enc_ctx) avcodec_free_context(&enc_ctx);
+    if (filter_graph) avfilter_graph_free(&filter_graph);
+    if (ifmt_ctx_v) avformat_close_input(&ifmt_ctx_v);
+    if (ifmt_ctx_a) avformat_close_input(&ifmt_ctx_a);
+    if (ofmt_ctx) {
+        if (!(ofmt_ctx->oformat->flags & AVFMT_NOFILE)) avio_closep(&ofmt_ctx->pb);
+        avformat_free_context(ofmt_ctx);
     }
-    return 0;
-#endif
+    return ret;
 }
 
 }  // namespace avsvc

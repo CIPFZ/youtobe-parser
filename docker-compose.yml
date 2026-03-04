@@ -13,4 +13,5 @@ services:
       - ./models/whisper:/models/whisper
     environment:
       - LD_LIBRARY_PATH=/usr/local/lib
+      - AV_TASK_DB_PATH=/data/output/task_manager.db
     command: ["/app/av_service"]
