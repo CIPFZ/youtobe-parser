@@ -4,8 +4,9 @@ services:
     pull_policy: always
     container_name: av-service
     
-    # 直接指定容器运行时的 UID/GID，确保生成的文件不属于 root
-    user: "${UID}:${GID}"
+    # 1. 使用 USER_ID 和 GROUP_ID 匹配脚本中的导出变量
+    # :-1000 表示如果变量未定义，则默认使用 UID 1000，消除空字符串警告
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     
     restart: unless-stopped
     ports:
@@ -16,5 +17,8 @@ services:
       - ./models/whisper:/models/whisper
       - ./logs:/app/logs
     environment:
+      # 2. 传递给容器内部，以便 entrypoint.sh 处理特殊权限逻辑
+      - USER_ID=${USER_ID:-1000}
+      - GROUP_ID=${GROUP_ID:-1000}
       - AV_TASK_DB_PATH=/data/output/task_manager.db
       - LD_LIBRARY_PATH=/usr/local/lib
