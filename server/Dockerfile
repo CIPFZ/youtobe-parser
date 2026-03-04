@@ -62,6 +62,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# 在 runtime 阶段的 apt-get install 中加入
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-noto-cjk \
+    fontconfig \
+    && fc-cache -fv
+
 WORKDIR /app
 
 COPY --from=builder /app/build/av_service /app/av_service
