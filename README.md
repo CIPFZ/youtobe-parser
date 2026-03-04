@@ -16,6 +16,23 @@ LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose up --build -d
 bash scripts/e2e_local.sh
 ```
 
+
+### Python 一键脚本配置（推荐使用 .env）
+
+先准备配置文件：
+
+```bash
+cp .env.example .env
+```
+
+至少需要填写：
+
+- `OPENAI_API_KEY`
+- `WHISPER_MODEL_DIR`（默认 `/models/whisper`）
+- `WHISPER_MODEL_NAME`（默认 `ggml-base.en.bin`）
+
+运行 `main.py` 时会自动读取 `.env`（也可用 `--env-file` 指定其他路径），CLI 参数仅作为覆盖项。
+
 ### 2) 查看服务日志
 
 ```bash
@@ -123,6 +140,22 @@ bash scripts/e2e_local.sh
 
 可选变量（按需覆盖）：`BASE_URL`、`MODEL_NAME`、`LANGUAGE`、`MAX_RETRIES`、`SLEEP_SECONDS`。
 
+
+
+### 5.3) 最终合成异步测试（定位“只有声音没有画面”）
+
+可使用脚本直接提交 `compose` 任务并轮询，然后用 `ffprobe` 校验输出是否同时包含音视频流：
+
+```bash
+python scripts/test_async_compose.py \
+  --base-url http://127.0.0.1:8888/api/v1 \
+  --video-path /data/input/video.mp4 \
+  --audio-path /data/input/audio.m4a \
+  --subtitle-path /data/input/subtitle.ass \
+  --output-path /data/output/final.with_sub.mp4
+```
+
+如果脚本报错 `invalid output streams`，说明最终文件流异常（会打印实际流类型），可据此快速定位是输入流问题还是服务端复用/编码问题。
 
 ### 5.1) 音频识别生成字幕（whisper.cpp C API）
 
