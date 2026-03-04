@@ -44,7 +44,8 @@ RUN cmake -S . -B build \
 FROM ubuntu:22.04 AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
-# 增加了 gosu 工具
+
+# 合并所有运行时依赖（包含音视频库、权限工具和中文字体库），并清理缓存
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     gosu \
@@ -60,36 +61,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g \
     libuuid1 \
     libsqlite3-0 \
-    && rm -rf /var/lib/apt/lists/*
-
-# 在 runtime 阶段的 apt-get install 中加入
-RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-cjk \
     fontconfig \
-    && fc-cache -fv
+    && fc-cache -fv \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# 拷贝核心产物
 COPY --from=builder /app/build/av_service /app/av_service
 COPY --from=builder /usr/local/lib/libworkflow.so* /usr/local/lib/
 COPY --from=builder /usr/local/lib/libwhisper.so* /usr/local/lib/
 COPY --from=builder /usr/local/lib/libggml*.so* /usr/local/lib/
 
-# 在 Dockerfile 中更新 entrypoint.sh 的生成部分
-RUN echo '#!/bin/bash\n\
-# 如果容器是以 root 启动的（没有在 compose 里指定 user），则执行原有降权逻辑\n\
-if [ "$(id -u)" = "0" ]; then\n\
-    PUID=${LOCAL_UID:-1000}\n\
-    PGID=${LOCAL_GID:-1000}\n\
-    groupadd -f -g $PGID avgroup\n\
-    id -u avuser &>/dev/null || useradd -u $PUID -g $PGID -s /bin/bash -m avuser\n\
-    chown -R $PUID:$PGID /data /models /app/logs 2>/dev/null || true\n\
-    exec gosu avuser /app/av_service "$@"\n\
-else\n\
-    # 如果已经在 compose 里指定了 user，则直接启动服务\n\
-    echo "Starting with user: $(id -u):$(id -g)"\n\
-    exec /app/av_service "$@"\n\
-fi' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+# 生成权限动态修复脚本，使用花括号组合命令以增强可读性
+RUN { \
+    echo '#!/bin/bash'; \
+    echo '# 如果容器是以 root 启动的（没有在 compose 里指定 user），则执行原有降权逻辑'; \
+    echo 'if [ "$(id -u)" = "0" ]; then'; \
+    echo '    PUID=${LOCAL_UID:-1000}'; \
+    echo '    PGID=${LOCAL_GID:-1000}'; \
+    echo '    groupadd -f -g $PGID avgroup'; \
+    echo '    id -u avuser &>/dev/null || useradd -u $PUID -g $PGID -s /bin/bash -m avuser'; \
+    echo '    chown -R $PUID:$PGID /data /models /app/logs 2>/dev/null || true'; \
+    echo '    exec gosu avuser /app/av_service "$@"'; \
+    echo 'else'; \
+    echo '    # 如果已经在 compose 里指定了 user，则直接以该身份启动服务'; \
+    echo '    echo "Starting with user: $(id -u):$(id -g)"'; \
+    echo '    exec /app/av_service "$@"'; \
+    echo 'fi'; \
+} > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 ENV LD_LIBRARY_PATH=/usr/local/lib
 EXPOSE 8888
