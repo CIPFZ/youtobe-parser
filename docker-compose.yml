@@ -1,9 +1,12 @@
 services:
   av-service:
-    build:
-      context: .
-      dockerfile: server/Dockerfile
+    image: ghcr.io/cipfz/youtobe-parser:latest
+    pull_policy: always
     container_name: av-service
+    
+    # 直接指定容器运行时的 UID/GID，确保生成的文件不属于 root
+    user: "${UID}:${GID}"
+    
     restart: unless-stopped
     ports:
       - "8888:8888"
@@ -13,8 +16,5 @@ services:
       - ./models/whisper:/models/whisper
       - ./logs:/app/logs
     environment:
-      # 通过环境变量将宿主机的身份传递给容器
-      - LOCAL_UID=${LOCAL_UID:-1000}
-      - LOCAL_GID=${LOCAL_GID:-1000}
       - AV_TASK_DB_PATH=/data/output/task_manager.db
       - LD_LIBRARY_PATH=/usr/local/lib

@@ -69,27 +69,21 @@ COPY --from=builder /usr/local/lib/libworkflow.so* /usr/local/lib/
 COPY --from=builder /usr/local/lib/libwhisper.so* /usr/local/lib/
 COPY --from=builder /usr/local/lib/libggml*.so* /usr/local/lib/
 
-# 权限修复与自检脚本
+# 在 Dockerfile 中更新 entrypoint.sh 的生成部分
 RUN echo '#!/bin/bash\n\
-# 1. 接收外部传入的 UID 和 GID，默认值为 1000\n\
-PUID=${LOCAL_UID:-1000}\n\
-PGID=${LOCAL_GID:-1000}\n\
-\n\
-# 2. 动态创建与宿主机权限一致的用户组和用户\n\
-groupadd -f -g $PGID avgroup\n\
-id -u avuser &>/dev/null || useradd -u $PUID -g $PGID -s /bin/bash -m avuser\n\
-\n\
-# 3. 将相关目录的权限强制修正为目标用户\n\
-chown -R $PUID:$PGID /data /models /app/logs 2>/dev/null || true\n\
-\n\
-echo "--- Environment Check ---"\n\
-ffmpeg -version | head -n 1\n\
-echo -n "x264 Support: " && ffmpeg -encoders | grep libx264 || echo "MISSING"\n\
-echo -n "Subtitles Filter: " && ffmpeg -filters | grep subtitles || echo "MISSING"\n\
-echo "------------------------"\n\
-\n\
-# 4. 使用 gosu 降权，以 avuser 的身份执行 C++ 服务\n\
-exec gosu avuser /app/av_service "$@"' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+# 如果容器是以 root 启动的（没有在 compose 里指定 user），则执行原有降权逻辑\n\
+if [ "$(id -u)" = "0" ]; then\n\
+    PUID=${LOCAL_UID:-1000}\n\
+    PGID=${LOCAL_GID:-1000}\n\
+    groupadd -f -g $PGID avgroup\n\
+    id -u avuser &>/dev/null || useradd -u $PUID -g $PGID -s /bin/bash -m avuser\n\
+    chown -R $PUID:$PGID /data /models /app/logs 2>/dev/null || true\n\
+    exec gosu avuser /app/av_service "$@"\n\
+else\n\
+    # 如果已经在 compose 里指定了 user，则直接启动服务\n\
+    echo "Starting with user: $(id -u):$(id -g)"\n\
+    exec /app/av_service "$@"\n\
+fi' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 ENV LD_LIBRARY_PATH=/usr/local/lib
 EXPOSE 8888

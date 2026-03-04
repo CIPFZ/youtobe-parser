@@ -63,7 +63,7 @@ int ComposeWorker::run(const std::string& video_path,
     int out_video_idx = -1, out_audio_idx = -1;
     
     int64_t v_pts_us = 0, a_pts_us = 0;
-    bool video_eof = false, audio_eof = false, decode_eof = false;
+    bool video_eof = false, audio_eof = false;
 
     // 1. 打开视频输入
     LOG_INF("Opening video input...");
@@ -107,17 +107,25 @@ int ComposeWorker::run(const std::string& video_path,
         enc_ctx->width = dec_ctx->width;
         enc_ctx->sample_aspect_ratio = dec_ctx->sample_aspect_ratio;
         enc_ctx->pix_fmt = AV_PIX_FMT_YUV420P; // 强制标准像素格式
-        enc_ctx->time_base = av_inv_q(dec_ctx->framerate);
+
+        // 修复点：使用 av_guess_frame_rate 获取更准确的帧率
+        AVRational frame_rate = av_guess_frame_rate(ifmt_ctx_v, ifmt_ctx_v->streams[video_stream_idx], nullptr);
+        if (frame_rate.num <= 0 || frame_rate.den <= 0) {
+            frame_rate = {30, 1}; // 保底 30fps
+        }
+        enc_ctx->time_base = av_inv_q(frame_rate);
+        enc_ctx->framerate = frame_rate;
         
         if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
             enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
             
-        // 性能优化：使用 fast 预设降低 CPU 占用，crf=23 保证质量
         av_opt_set(enc_ctx->priv_data, "preset", "fast", 0);
         av_opt_set(enc_ctx->priv_data, "crf", "23", 0);
         
         if ((ret = avcodec_open2(enc_ctx, enc, nullptr)) < 0) {
-            LOG_ERR("Cannot open video encoder.");
+            char errbuf[128];
+            av_strerror(ret, errbuf, sizeof(errbuf));
+            LOG_ERR("Cannot open video encoder: " << errbuf);
             goto end;
         }
         
@@ -125,7 +133,7 @@ int ComposeWorker::run(const std::string& video_path,
         out_video_idx = out_v_stream->index;
         avcodec_parameters_from_context(out_v_stream->codecpar, enc_ctx);
         out_v_stream->time_base = enc_ctx->time_base;
-        LOG_INF("Video encoder libx264 configured.");
+        LOG_INF("Video encoder libx264 configured with TB " << enc_ctx->time_base.num << "/" << enc_ctx->time_base.den);
     }
 
     // 6. 配置音频输出流 (Stream Copy)
@@ -139,7 +147,7 @@ int ComposeWorker::run(const std::string& video_path,
         LOG_INF("Audio output stream configured for copying.");
     }
 
-    // 7. 配置滤镜图 (Filter Graph: buffer -> ass -> buffersink)
+    // 7. 配置滤镜图
     {
         LOG_INF("Setting up subtitle filter graph...");
         filter_graph = avfilter_graph_alloc();
@@ -171,7 +179,6 @@ int ComposeWorker::run(const std::string& video_path,
         inputs->pad_idx    = 0;
         inputs->next       = nullptr;
 
-        // 构造 ass 滤镜参数
         std::string filter_str = "ass='" + subtitle_path + "'";
         if ((ret = avfilter_graph_parse_ptr(filter_graph, filter_str.c_str(), &inputs, &outputs, nullptr)) < 0) {
             LOG_ERR("Cannot parse filter graph.");
@@ -196,7 +203,6 @@ int ComposeWorker::run(const std::string& video_path,
         LOG_ERR("Error occurred when opening output file."); goto end;
     }
 
-    // 初始化包和帧
     pkt = av_packet_alloc();
     enc_pkt = av_packet_alloc();
     audio_pkt = av_packet_alloc();
@@ -206,30 +212,21 @@ int ComposeWorker::run(const std::string& video_path,
     if (on_progress) on_progress(10, "starting hardsub process...");
 
     LOG_INF("Entering main processing loop...");
-    // 9. 主处理循环：交替读取视频和音频，以保证时间戳单调递增
     while (!video_eof || !audio_eof) {
-        // 如果音频已经结束，或者视频进度落后于音频，且视频没结束，则处理视频
         if (!video_eof && (audio_eof || v_pts_us <= a_pts_us)) {
             ret = av_read_frame(ifmt_ctx_v, pkt);
             if (ret < 0) {
                 video_eof = true;
-                // 向解码器发送 EOF flush
                 avcodec_send_packet(dec_ctx, nullptr);
             } else if (pkt->stream_index == video_stream_idx) {
                 avcodec_send_packet(dec_ctx, pkt);
             }
             av_packet_unref(pkt);
 
-            // 接收解码后的帧
             while (avcodec_receive_frame(dec_ctx, frame) >= 0) {
-                // 送入滤镜图烧录字幕
                 av_buffersrc_add_frame_flags(buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF);
-                
                 while (av_buffersink_get_frame(buffersink_ctx, filt_frame) >= 0) {
-                    // 更新视频进度
                     v_pts_us = av_rescale_q(filt_frame->pts, ifmt_ctx_v->streams[video_stream_idx]->time_base, {1, AV_TIME_BASE});
-                    
-                    // 送入编码器
                     avcodec_send_frame(enc_ctx, filt_frame);
                     while (avcodec_receive_packet(enc_ctx, enc_pkt) >= 0) {
                         av_packet_rescale_ts(enc_pkt, enc_ctx->time_base, ofmt_ctx->streams[out_video_idx]->time_base);
@@ -242,15 +239,12 @@ int ComposeWorker::run(const std::string& video_path,
                 av_frame_unref(frame);
             }
         } 
-        // 处理音频 (Stream Copy)
         else if (!audio_eof) {
             ret = av_read_frame(ifmt_ctx_a, audio_pkt);
             if (ret < 0) {
                 audio_eof = true;
             } else if (audio_pkt->stream_index == audio_stream_idx) {
-                // 更新音频进度
                 a_pts_us = av_rescale_q(audio_pkt->pts, ifmt_ctx_a->streams[audio_stream_idx]->time_base, {1, AV_TIME_BASE});
-                
                 av_packet_rescale_ts(audio_pkt, ifmt_ctx_a->streams[audio_stream_idx]->time_base, ofmt_ctx->streams[out_audio_idx]->time_base);
                 audio_pkt->stream_index = out_audio_idx;
                 av_interleaved_write_frame(ofmt_ctx, audio_pkt);
@@ -258,14 +252,12 @@ int ComposeWorker::run(const std::string& video_path,
             av_packet_unref(audio_pkt);
         }
         
-        // 进度汇报 (假设视频更长，用视频进度计算)
         if (on_progress && ifmt_ctx_v->duration > 0 && !video_eof) {
             int p = 10 + (v_pts_us * 85 / ifmt_ctx_v->duration);
             on_progress(std::min(95, std::max(10, p)), "hardsub encoding...");
         }
     }
 
-    // 10. Flush filter and encoder
     LOG_INF("Flushing filters and encoders...");
     av_buffersrc_add_frame_flags(buffersrc_ctx, nullptr, 0);
     while (av_buffersink_get_frame(buffersink_ctx, filt_frame) >= 0) {
@@ -279,7 +271,6 @@ int ComposeWorker::run(const std::string& video_path,
         av_frame_unref(filt_frame);
     }
     
-    // Flush encoder
     avcodec_send_frame(enc_ctx, nullptr);
     while (avcodec_receive_packet(enc_ctx, enc_pkt) >= 0) {
         av_packet_rescale_ts(enc_pkt, enc_ctx->time_base, ofmt_ctx->streams[out_video_idx]->time_base);
@@ -294,7 +285,6 @@ int ComposeWorker::run(const std::string& video_path,
     ret = 0;
 
 end:
-    // 11. 完美的 RAII/Goto 资源释放，杜绝内存泄漏
     LOG_INF("Cleaning up resources...");
     if (pkt) av_packet_free(&pkt);
     if (enc_pkt) av_packet_free(&enc_pkt);
