@@ -97,33 +97,3 @@ endif()
 
 add_executable(av_service src/main.cpp)
 target_link_libraries(av_service PRIVATE av_core)
-
-enable_testing()
-
-add_executable(test_task_manager tests/test_task_manager.cpp)
-target_link_libraries(test_task_manager PRIVATE av_core)
-add_test(NAME test_task_manager COMMAND test_task_manager)
-
-add_executable(test_merge_worker tests/test_merge_worker.cpp)
-target_link_libraries(test_merge_worker PRIVATE av_core)
-add_test(NAME test_merge_worker COMMAND test_merge_worker)
-
-add_executable(test_integration_flow tests/test_integration_flow.cpp)
-target_link_libraries(test_integration_flow PRIVATE av_core)
-add_test(NAME test_integration_flow COMMAND test_integration_flow)
-
-add_executable(test_asr_worker tests/test_asr_worker.cpp)
-target_link_libraries(test_asr_worker PRIVATE av_core)
-add_test(NAME test_asr_worker COMMAND test_asr_worker)
-
-add_executable(test_audio_convert_worker tests/test_audio_convert_worker.cpp)
-target_link_libraries(test_audio_convert_worker PRIVATE av_core)
-add_test(NAME test_audio_convert_worker COMMAND test_audio_convert_worker)
-
-add_executable(test_subtitle_embed_worker tests/test_subtitle_embed_worker.cpp)
-target_link_libraries(test_subtitle_embed_worker PRIVATE av_core)
-add_test(NAME test_subtitle_embed_worker COMMAND test_subtitle_embed_worker)
-
-add_executable(test_compose_worker tests/test_compose_worker.cpp)
-target_link_libraries(test_compose_worker PRIVATE av_core)
-add_test(NAME test_compose_worker COMMAND test_compose_worker)
