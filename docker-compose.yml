@@ -1,9 +1,9 @@
 services:
   av-service:
-    image: ${AV_SERVICE_IMAGE:-ghcr.io/cipfz/youtobe-workflow/av-service:latest}
-    pull_policy: always
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     container_name: av-service
-    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     restart: unless-stopped
     ports:
       - "8888:8888"
@@ -11,7 +11,10 @@ services:
       - ./data/input:/data/input
       - ./data/output:/data/output
       - ./models/whisper:/models/whisper
+      - ./logs:/app/logs
     environment:
-      - LD_LIBRARY_PATH=/usr/local/lib
+      # 通过环境变量将宿主机的身份传递给容器
+      - LOCAL_UID=${LOCAL_UID:-1000}
+      - LOCAL_GID=${LOCAL_GID:-1000}
       - AV_TASK_DB_PATH=/data/output/task_manager.db
-    command: ["/app/av_service"]
+      - LD_LIBRARY_PATH=/usr/local/lib

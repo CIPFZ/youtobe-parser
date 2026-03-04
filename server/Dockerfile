@@ -44,31 +44,52 @@ RUN cmake -S . -B build \
 FROM ubuntu:22.04 AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
-# 包含硬字幕需要的 libavfilter7 和 libass9，以及调试用的 ffmpeg 工具
+# 增加了 gosu 工具
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    libstdc++6 ca-certificates \
-    libavformat58 libavcodec58 libavutil56 libswresample3 \
-    libavfilter7 libass9 \
-    libssl3 zlib1g libuuid1 libsqlite3-0 \
+    gosu \
+    libstdc++6 \
+    ca-certificates \
+    libavformat58 \
+    libavcodec58 \
+    libavutil56 \
+    libswresample3 \
+    libavfilter7 \
+    libass9 \
+    libssl3 \
+    zlib1g \
+    libuuid1 \
+    libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 从 builder 阶段拷贝所需文件
 COPY --from=builder /app/build/av_service /app/av_service
 COPY --from=builder /usr/local/lib/libworkflow.so* /usr/local/lib/
 COPY --from=builder /usr/local/lib/libwhisper.so* /usr/local/lib/
 COPY --from=builder /usr/local/lib/libggml*.so* /usr/local/lib/
 
-# 环境自检脚本：验证编码器和滤镜是否就绪
+# 权限修复与自检脚本
 RUN echo '#!/bin/bash\n\
+# 1. 接收外部传入的 UID 和 GID，默认值为 1000\n\
+PUID=${LOCAL_UID:-1000}\n\
+PGID=${LOCAL_GID:-1000}\n\
+\n\
+# 2. 动态创建与宿主机权限一致的用户组和用户\n\
+groupadd -f -g $PGID avgroup\n\
+id -u avuser &>/dev/null || useradd -u $PUID -g $PGID -s /bin/bash -m avuser\n\
+\n\
+# 3. 将相关目录的权限强制修正为目标用户\n\
+chown -R $PUID:$PGID /data /models /app/logs 2>/dev/null || true\n\
+\n\
 echo "--- Environment Check ---"\n\
 ffmpeg -version | head -n 1\n\
 echo -n "x264 Support: " && ffmpeg -encoders | grep libx264 || echo "MISSING"\n\
 echo -n "Subtitles Filter: " && ffmpeg -filters | grep subtitles || echo "MISSING"\n\
 echo "------------------------"\n\
-exec /app/av_service "$@"' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+\n\
+# 4. 使用 gosu 降权，以 avuser 的身份执行 C++ 服务\n\
+exec gosu avuser /app/av_service "$@"' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 ENV LD_LIBRARY_PATH=/usr/local/lib
 EXPOSE 8888
