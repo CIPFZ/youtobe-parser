@@ -12,10 +12,13 @@ HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8888/healthz}"
 
 # 获取当前用户的 UID 和 GID
 # 这对于 docker-compose.yml 中的 user: "${UID}:${GID}" 至关重要
-export UID=$(id -u)
-export GID=$(id -g)
-export LOCAL_UID=$UID
-export LOCAL_GID=$GID
+USER_ID=$(id -u)
+GROUP_ID=$(id -g)
+
+export USER_ID
+export GROUP_ID
+export LOCAL_UID=$USER_ID
+export LOCAL_GID=$GROUP_ID
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "[ERROR] docker 不存在" >&2
@@ -27,7 +30,7 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "[INFO] 当前运行用户: $(id -un) (UID: $UID, GID: $GID)"
+echo "[INFO] 当前运行用户: $(id -un) (UID: $USER_ID, GID: $GROUP_ID)"
 echo "[INFO] 拉取最新镜像: ${AV_SERVICE_IMAGE}"
 docker pull "${AV_SERVICE_IMAGE}"
 
