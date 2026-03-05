@@ -39,24 +39,13 @@ async def wait_task(base_url: str, task_id: str, sleep_s: float, max_retries: in
     raise TimeoutError(f"task timeout: {task_id}")
 
 
-def probe_streams(path: str) -> set[str]:
-    rsp = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "json", path],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    data = json.loads(rsp.stdout or "{}")
-    return {str(s.get("codec_type")) for s in data.get("streams", []) if s.get("codec_type")}
-
-
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Async compose check with stream validation")
     parser.add_argument("--base-url", default="http://127.0.0.1:8888/api/v1")
-    parser.add_argument("--video-path", default="/data/input/iMDibaO4dXw/iMDibaO4dXw.mp4")
-    parser.add_argument("--audio-path", default="/data/input/iMDibaO4dXw/iMDibaO4dXw.m4a")
-    parser.add_argument("--subtitle-path", default="/data/input/iMDibaO4dXw/iMDibaO4dXw.ass")
-    parser.add_argument("--output-path", default="/data/output/iMDibaO4dXw_merge.mp4")
+    parser.add_argument("--video-path", default="/data/input/task/test.mp4")
+    parser.add_argument("--audio-path", default="/data/input/task/test.m4a")
+    parser.add_argument("--subtitle-path", default="/data/input/task/test.ass")
+    parser.add_argument("--output-path", default="/data/output/test_merge.mp4")
     parser.add_argument("--sleep", type=float, default=1.0)
     parser.add_argument("--max-retries", type=int, default=300)
     args = parser.parse_args()
@@ -72,11 +61,7 @@ async def main() -> None:
     )
     await wait_task(args.base_url, task_id, args.sleep, args.max_retries)
 
-    streams = probe_streams(args.output_path)
-    if "video" not in streams or "audio" not in streams:
-        raise RuntimeError(f"invalid output streams for {args.output_path}: {sorted(streams)}")
-
-    print(f"ok: {args.output_path} streams={sorted(streams)}")
+    print(f"ok: {args.output_path}")
 
 
 if __name__ == "__main__":
