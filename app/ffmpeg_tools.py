@@ -1,12 +1,33 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
 import imageio_ffmpeg
 
+from app.settings import settings
+
 
 def ffmpeg_bin() -> str:
+    """Resolve ffmpeg binary path.
+
+    Priority:
+    1) FFMPEG_PATH from settings (.env / env var)
+    2) PATH lookup for "ffmpeg"
+    3) imageio-ffmpeg managed binary
+    """
+    custom = settings.ffmpeg_path.strip()
+    if custom:
+        p = Path(custom).expanduser()
+        if p.exists() and p.is_file():
+            return str(p)
+        raise FileNotFoundError(f'Configured FFMPEG_PATH does not exist: {custom}')
+
+    system_ffmpeg = shutil.which('ffmpeg')
+    if system_ffmpeg:
+        return system_ffmpeg
+
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 

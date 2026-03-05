@@ -11,7 +11,7 @@
 
 - **高效**：全链路纯 Python，减少多服务通信开销。
 - **快捷**：单命令跑完整流程。
-- **可迁移**：`ffmpeg` 使用 `imageio-ffmpeg` 自动下载项目专用二进制。
+- **可迁移**：默认可使用 `imageio-ffmpeg` 自动下载项目专用二进制，也支持自定义 `ffmpeg` 路径。
 - **GPU 兼容**：`faster-whisper` 原生支持 CUDA 场景。
 
 ## 安装
@@ -35,6 +35,7 @@ pip install -e .
 - `TARGET_LANGUAGE`（默认 `zh-CN`）
 - `WORK_DIR`（默认 `runtime`）
 - `OUTPUT_NAME`（默认 `final_output`）
+- `FFMPEG_PATH`（可选，自定义 ffmpeg 可执行文件绝对路径）
 
 > 不配置 `OPENAI_API_KEY` 时，翻译阶段会跳过（直接使用原文）。
 

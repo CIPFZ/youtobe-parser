@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # yt-dlp
     cookie_file: str = Field(default='')
 
+    # ffmpeg
+    ffmpeg_path: str = Field(default='')
+
     # whisper
     whisper_model: str = Field(default='large-v3')
     whisper_device: str = Field(default='auto')
