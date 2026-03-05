@@ -7,6 +7,8 @@
 #include <memory>
 #include <regex>
 #include <cstdlib>
+#include <thread>      // 修复：添加 thread 头文件以支持 hardware_concurrency
+#include <algorithm>   // 修复：添加 algorithm 头文件以支持 std::max 和 std::min
 
 extern "C" {
 #include <libavformat/avformat.h> // 仅用于快速获取视频总时长
