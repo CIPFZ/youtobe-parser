@@ -61,3 +61,7 @@ yp-run "https://www.youtube.com/watch?v=..."
 - `app/translator.py`：字幕翻译
 - `app/subtitles.py`：SRT/ASS 读写
 - `app/ffmpeg_tools.py`：项目内 ffmpeg 调用
+
+## 仓库清理说明
+
+已删除历史遗留的 `server/`、`scripts/`、`docs/`、`docker-compose.yml`、旧 CI 工作流与旧 lock 文件，仅保留当前纯 Python 流程所需代码。
