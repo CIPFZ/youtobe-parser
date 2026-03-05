@@ -58,7 +58,7 @@ async def main() -> None:
     parser.add_argument("--subtitle-path", default="/data/input/iMDibaO4dXw/iMDibaO4dXw.ass")
     parser.add_argument("--output-path", default="/data/output/iMDibaO4dXw_merge.mp4")
     parser.add_argument("--sleep", type=float, default=1.0)
-    parser.add_argument("--max-retries", type=int, default=180)
+    parser.add_argument("--max-retries", type=int, default=300)
     args = parser.parse_args()
 
     task_id = await submit_compose(

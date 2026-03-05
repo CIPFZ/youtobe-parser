@@ -6,6 +6,9 @@
 #include <filesystem>
 #include <vector>
 #include <algorithm>
+#include <thread>
+#include <cstdlib>
+#include <string>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -52,7 +55,38 @@ int ComposeWorker::run(const std::string& video_path,
     int ret = 0;
 
     // ==========================================================
-    // 第一阶段：纯视频硬字幕渲染 (剥离音频，解决交织混乱与卡顿)
+    // 资源策略配置：动态核心比例 & GPU 开关
+    // ==========================================================
+    
+    // 1. 读取并解析线程比例配置
+    float thread_ratio = 0.8f; // 默认 80%
+    const char* env_ratio = std::getenv("AV_THREAD_RATIO");
+    if (env_ratio != nullptr) {
+        try {
+            float parsed_ratio = std::stof(env_ratio);
+            if (parsed_ratio > 0.0f && parsed_ratio <= 1.0f) {
+                thread_ratio = parsed_ratio;
+            } else {
+                LOG_INF("AV_THREAD_RATIO out of bounds (0, 1]. Using default 0.8");
+            }
+        } catch (...) {
+            LOG_INF("Invalid AV_THREAD_RATIO format. Using default 0.8");
+        }
+    }
+
+    unsigned int hw_cores = std::thread::hardware_concurrency();
+    int target_threads = hw_cores > 0 ? std::max(1, static_cast<int>(hw_cores * thread_ratio)) : 0;
+    
+    // 2. 读取 GPU 加速开关
+    const char* env_nvenc = std::getenv("AV_ENABLE_NVENC");
+    bool allow_nvenc = (env_nvenc == nullptr || std::string(env_nvenc) != "false");
+
+    LOG_INF("System Cores: " << hw_cores << ", Configured Ratio: " << thread_ratio 
+            << ", Allocated Threads: " << target_threads);
+    LOG_INF("NVENC Hardware Acceleration Allowed: " << (allow_nvenc ? "YES" : "NO"));
+
+    // ==========================================================
+    // 第一阶段：纯视频硬字幕渲染
     // ==========================================================
     AVFormatContext *ifmt_ctx_v = nullptr, *ofmt_ctx = nullptr;
     AVCodecContext *dec_ctx = nullptr, *enc_ctx = nullptr;
@@ -71,40 +105,83 @@ int ComposeWorker::run(const std::string& video_path,
 
     avformat_alloc_output_context2(&ofmt_ctx, nullptr, nullptr, temp_video_path.c_str());
 
-    // 解码器
+    // 1. 解码器配置 (应用 CPU 限制)
     AVStream *in_v_stream = ifmt_ctx_v->streams[video_stream_idx];
     const AVCodec *dec = avcodec_find_decoder(in_v_stream->codecpar->codec_id);
     dec_ctx = avcodec_alloc_context3(dec);
     avcodec_parameters_to_context(dec_ctx, in_v_stream->codecpar);
+    dec_ctx->thread_count = target_threads; 
     avcodec_open2(dec_ctx, dec, nullptr);
 
-    // 编码器
-    const AVCodec *enc = avcodec_find_encoder_by_name("libx264");
-    enc_ctx = avcodec_alloc_context3(enc);
-    enc_ctx->height = dec_ctx->height;
-    enc_ctx->width = dec_ctx->width;
-    enc_ctx->sample_aspect_ratio = dec_ctx->sample_aspect_ratio;
-    enc_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+    // 2. 编码器配置
+    const AVCodec *enc = nullptr;
+    bool use_hw = false;
 
-    AVRational frame_rate = av_guess_frame_rate(ifmt_ctx_v, in_v_stream, nullptr);
-    if (frame_rate.num <= 0 || frame_rate.den <= 0) frame_rate = {30, 1};
-    enc_ctx->time_base = av_inv_q(frame_rate);
-    enc_ctx->framerate = frame_rate;
-    
-    if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER) enc_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    auto setup_encoder = [&](const AVCodec* codec, bool is_hw) {
+        AVCodecContext* ctx = avcodec_alloc_context3(codec);
+        ctx->height = dec_ctx->height;
+        ctx->width = dec_ctx->width;
+        ctx->sample_aspect_ratio = dec_ctx->sample_aspect_ratio;
+        ctx->pix_fmt = is_hw ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUV420P;
         
-    // 关键优化：强制 CRF=23 和 Preset=fast，完美解决 400MB 体积暴增问题
-    av_opt_set(enc_ctx->priv_data, "preset", "fast", 0);
-    av_opt_set(enc_ctx->priv_data, "crf", "23", 0);
+        // 只有软件编码器才吃 CPU 线程，硬件编码器主要靠 GPU 计算单元
+        if (!is_hw) {
+            ctx->thread_count = target_threads;
+        }
+
+        AVRational frame_rate = av_guess_frame_rate(ifmt_ctx_v, in_v_stream, nullptr);
+        if (frame_rate.num <= 0 || frame_rate.den <= 0) frame_rate = {30, 1};
+        ctx->time_base = av_inv_q(frame_rate);
+        ctx->framerate = frame_rate;
+        
+        if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER) ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+        
+        if (is_hw) {
+            av_opt_set(ctx->priv_data, "preset", "p4", 0); 
+            av_opt_set(ctx->priv_data, "tune", "hq", 0);
+            av_opt_set(ctx->priv_data, "cq", "26", 0);     
+        } else {
+            av_opt_set(ctx->priv_data, "preset", "fast", 0);
+            av_opt_set(ctx->priv_data, "crf", "23", 0);    
+        }
+        return ctx;
+    };
+
+    if (allow_nvenc) {
+        enc = avcodec_find_encoder_by_name("h264_nvenc");
+        if (enc) {
+            enc_ctx = setup_encoder(enc, true);
+            if (avcodec_open2(enc_ctx, enc, nullptr) >= 0) {
+                use_hw = true;
+                LOG_INF("Successfully opened h264_nvenc (Hardware Acceleration Enable)");
+            } else {
+                LOG_INF("Failed to initialize h264_nvenc, falling back to CPU...");
+                avcodec_free_context(&enc_ctx);
+                enc_ctx = nullptr;
+            }
+        }
+    }
     
-    avcodec_open2(enc_ctx, enc, nullptr);
+    if (!use_hw) {
+        enc = avcodec_find_encoder_by_name("libx264");
+        if (!enc) {
+            LOG_ERR("libx264 not found!");
+            return -1;
+        }
+        enc_ctx = setup_encoder(enc, false);
+        if (avcodec_open2(enc_ctx, enc, nullptr) < 0) {
+            LOG_ERR("Cannot open video encoder.");
+            return -1;
+        }
+        LOG_INF("Successfully opened libx264 (CPU Software Encoder Enable)");
+    }
     
     AVStream *out_v_stream = avformat_new_stream(ofmt_ctx, nullptr);
     out_video_idx = out_v_stream->index;
     avcodec_parameters_from_context(out_v_stream->codecpar, enc_ctx);
     out_v_stream->time_base = enc_ctx->time_base;
 
-    // 滤镜图
+    // 3. 滤镜图配置
     filter_graph = avfilter_graph_alloc();
     const AVFilter *buffersrc  = avfilter_get_by_name("buffer");
     const AVFilter *buffersink = avfilter_get_by_name("buffersink");
@@ -113,8 +190,13 @@ int ComposeWorker::run(const std::string& video_path,
              dec_ctx->width, dec_ctx->height, dec_ctx->pix_fmt,
              in_v_stream->time_base.num, in_v_stream->time_base.den,
              dec_ctx->sample_aspect_ratio.num, dec_ctx->sample_aspect_ratio.den);
+    
+    // 限制滤镜使用的线程数
+    filter_graph->nb_threads = target_threads;
+
     avfilter_graph_create_filter(&buffersrc_ctx, buffersrc, "in", args, nullptr, filter_graph);
     avfilter_graph_create_filter(&buffersink_ctx, buffersink, "out", nullptr, nullptr, filter_graph);
+    
     enum AVPixelFormat pix_fmts[] = { enc_ctx->pix_fmt, AV_PIX_FMT_NONE };
     av_opt_set_int_list(buffersink_ctx, "pix_fmts", pix_fmts, AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
 
@@ -139,6 +221,7 @@ int ComposeWorker::run(const std::string& video_path,
     LOG_INF("Phase 1: Hardsubbing video stream...");
     int64_t v_pts_us = 0;
     
+    // 4. 视频烧录主循环
     while (av_read_frame(ifmt_ctx_v, pkt) >= 0) {
         if (pkt->stream_index == video_stream_idx) {
             avcodec_send_packet(dec_ctx, pkt);
@@ -207,12 +290,10 @@ int ComposeWorker::run(const std::string& video_path,
     MergeWorker muxer;
     ret = muxer.run(temp_video_path, audio_path, output_path, [on_progress](int p, const std::string& msg) {
         if (on_progress) {
-            // 将 MergeWorker 的进度 0-100 映射到主任务的 90-100
             on_progress(90 + (p / 10), "Phase 2: Muxing audio...");
         }
     });
 
-    // 清理临时视频文件
     std::filesystem::remove(temp_video_path);
 
     if (ret == 0 && on_progress) on_progress(100, "done");

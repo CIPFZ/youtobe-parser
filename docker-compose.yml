@@ -22,3 +22,5 @@ services:
       - GROUP_ID=${GROUP_ID:-1000}
       - AV_TASK_DB_PATH=/data/output/task_manager.db
       - LD_LIBRARY_PATH=/usr/local/lib
+      - AV_THREAD_RATIO=0.8    # 拉满所有 CPU 核心
+      - AV_ENABLE_NVENC=false  # 配合关闭显卡，体验极限软编速度
