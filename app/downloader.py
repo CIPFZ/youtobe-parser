@@ -6,7 +6,7 @@ from typing import Any
 import yt_dlp
 
 
-def download_media(url: str, out_dir: Path, cookie_file: str = '') -> dict[str, Any]:
+def download_media(url: str, out_dir: Path, cookie_file: str = '', proxy_url: str = '') -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
     opts: dict[str, Any] = {
         'quiet': False,
@@ -16,8 +16,11 @@ def download_media(url: str, out_dir: Path, cookie_file: str = '') -> dict[str, 
     }
     if cookie_file:
         opts['cookiefile'] = cookie_file
+    if proxy_url:
+        opts['proxy'] = proxy_url
 
     with yt_dlp.YoutubeDL(opts) as ydl:
+        # extract_info with download=True covers both metadata parsing and actual download.
         info = ydl.extract_info(url, download=True)
         req = ydl.prepare_filename(info)
 

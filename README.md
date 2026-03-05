@@ -36,6 +36,7 @@ pip install -e .
 - `WORK_DIR`（默认 `runtime`）
 - `OUTPUT_NAME`（默认 `final_output`）
 - `FFMPEG_PATH`（可选，自定义 ffmpeg 可执行文件绝对路径）
+- `YTDLP_PROXY`（可选，视频解析与下载代理，例如 `socks5://127.0.0.1:7897`）
 
 > 不配置 `OPENAI_API_KEY` 时，翻译阶段会跳过（直接使用原文）。
 
@@ -66,3 +67,14 @@ yp-run "https://www.youtube.com/watch?v=..."
 ## 仓库清理说明
 
 已删除历史遗留的 `server/`、`scripts/`、`docs/`、`docker-compose.yml`、旧 CI 工作流与旧 lock 文件，仅保留当前纯 Python 流程所需代码。
+
+
+## 代理示例
+
+如果你本地使用代理（如 clash/v2ray），可在 `.env` 中配置：
+
+```env
+YTDLP_PROXY=socks5://127.0.0.1:7897
+```
+
+该代理会用于 `yt-dlp` 的链接解析和媒体下载。

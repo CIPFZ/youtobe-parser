@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     # yt-dlp
     cookie_file: str = Field(default='')
+    ytdlp_proxy: str = Field(default='')
 
     # ffmpeg
     ffmpeg_path: str = Field(default='')

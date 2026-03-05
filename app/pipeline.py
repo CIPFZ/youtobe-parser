@@ -21,7 +21,12 @@ class Pipeline:
 
     def run(self, url: str) -> Path:
         print('1) 解析链接并下载音频+视频...')
-        media = download_media(url=url, out_dir=self.download_dir, cookie_file=settings.cookie_file)
+        media = download_media(
+            url=url,
+            out_dir=self.download_dir,
+            cookie_file=settings.cookie_file,
+            proxy_url=settings.ytdlp_proxy,
+        )
         video_path = Path(media['video_path'])
         audio_path = Path(media['audio_path'])
 
