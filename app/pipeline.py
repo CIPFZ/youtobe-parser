@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import logging
 from pathlib import Path
 
 from app.downloader import download_media
@@ -9,6 +11,8 @@ from app.subtitles import write_ass, write_srt
 from app.transcriber import FastWhisperTranscriber
 from app.translator import SubtitleTranslator
 
+logger = logging.getLogger(__name__)
+
 
 class Pipeline:
     def __init__(self) -> None:
@@ -16,31 +20,42 @@ class Pipeline:
         self.download_dir = self.work_dir / 'downloads'
         self.subtitle_dir = self.work_dir / 'subtitles'
         self.output_dir = self.work_dir / 'output'
-        for d in (self.download_dir, self.subtitle_dir, self.output_dir):
+        self.metadata_dir = self.work_dir / settings.metadata_dirname
+        for d in (self.download_dir, self.subtitle_dir, self.output_dir, self.metadata_dir):
             d.mkdir(parents=True, exist_ok=True)
+        logger.info('Pipeline initialized. work_dir=%s', self.work_dir)
 
     def run(self, url: str) -> Path:
-        print('1) 解析链接并下载音频+视频...')
+        logger.info('Stage 1/4: parse and download media')
         media = download_media(
             url=url,
             out_dir=self.download_dir,
             cookie_file=settings.cookie_file,
             proxy_url=settings.ytdlp_proxy,
+            playlist_strategy=settings.playlist_strategy,
         )
         video_path = Path(media['video_path'])
         audio_path = Path(media['audio_path'])
+        logger.info('Downloaded media. video=%s audio=%s', video_path, audio_path)
 
-        print('2) fast-whisper 转写 SRT...')
+        metadata_path = self.metadata_dir / f'{settings.output_name}.video_info.json'
+        metadata_path.write_text(json.dumps(media.get('metadata', {}), ensure_ascii=False, indent=2), encoding='utf-8')
+        logger.info('Video metadata written. path=%s', metadata_path)
+
+        logger.info('Stage 2/4: transcribe audio to SRT segments')
         segments = FastWhisperTranscriber().transcribe(str(audio_path))
         srt_path = self.subtitle_dir / f"{settings.output_name}.srt"
         write_srt(segments, srt_path)
+        logger.info('SRT written. path=%s segments=%d', srt_path, len(segments))
 
-        print('3) 翻译 SRT 并生成 ASS...')
+        logger.info('Stage 3/4: translate segments and write ASS')
         translated = SubtitleTranslator().translate(segments)
         ass_path = self.subtitle_dir / f"{settings.output_name}.ass"
         write_ass(translated, ass_path)
+        logger.info('ASS written. path=%s segments=%d', ass_path, len(translated))
 
-        print('4) 合并 ASS + 音频 + 视频...')
+        logger.info('Stage 4/4: merge video + audio + ASS')
         output_path = self.output_dir / f'{settings.output_name}.mp4'
         merge_av_with_ass(video=video_path, audio=audio_path, ass=ass_path, out=output_path)
+        logger.info('Merge completed. output=%s', output_path)
         return output_path

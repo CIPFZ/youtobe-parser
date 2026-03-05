@@ -35,8 +35,12 @@ pip install -e .
 - `TARGET_LANGUAGE`（默认 `zh-CN`）
 - `WORK_DIR`（默认 `runtime`）
 - `OUTPUT_NAME`（默认 `final_output`）
+- `METADATA_DIRNAME`（默认 `metadata`，保存视频基础信息 JSON）
 - `FFMPEG_PATH`（可选，自定义 ffmpeg 可执行文件绝对路径）
 - `YTDLP_PROXY`（可选，视频解析与下载代理，例如 `socks5://127.0.0.1:7897`）
+- `PLAYLIST_STRATEGY`（默认 `first`，合集链接仅下载当前视频/首个视频）
+- `LOG_LEVEL`（日志级别，默认 `INFO`）
+- `LOG_FILE`（日志文件路径，默认 `runtime/logs/pipeline.log`）
 
 > 不配置 `OPENAI_API_KEY` 时，翻译阶段会跳过（直接使用原文）。
 
@@ -54,6 +58,7 @@ yp-run "https://www.youtube.com/watch?v=..."
 - `runtime/subtitles/*.srt`：识别字幕
 - `runtime/subtitles/*.ass`：翻译后 ASS
 - `runtime/output/*.mp4`：最终成片
+- `runtime/metadata/*.video_info.json`：视频解析基础信息
 
 ## 代码结构
 
@@ -95,3 +100,30 @@ python -m unittest discover -s tests -v
 ```
 
 说明：测试已覆盖下载、转写、翻译、字幕生成、ffmpeg 调用和整条 Pipeline 编排（通过 mock 进行端到端流程验证）。
+
+
+## 日志
+
+流程会输出到控制台并写入日志文件。
+
+默认日志文件：`runtime/logs/pipeline.log`
+
+你可以通过 `.env` 配置：
+
+```env
+LOG_LEVEL=INFO
+LOG_FILE=runtime/logs/pipeline.log
+```
+
+
+## 合集链接策略
+
+针对如下链接：
+
+`https://www.youtube.com/watch?v=DFdh8BrzJ_Y&list=RDDFdh8BrzJ_Y&start_radio=1`
+
+当前默认策略是 `PLAYLIST_STRATEGY=first`：
+- 自动归一化为 `https://www.youtube.com/watch?v=DFdh8BrzJ_Y`
+- 只处理当前视频（不整单播放列表）
+
+这样可以保证主流程（单视频→单字幕→单输出）稳定可控。后续如果你要“整合集批处理”，我们可以再扩展 `all` 模式。

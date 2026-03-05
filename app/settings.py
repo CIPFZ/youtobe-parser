@@ -12,13 +12,20 @@ class Settings(BaseSettings):
     work_dir: Path = Field(default=Path('runtime'))
     source_url: str = Field(default='')
     output_name: str = Field(default='final_output')
+    metadata_dirname: str = Field(default='metadata')
 
     # yt-dlp
     cookie_file: str = Field(default='')
     ytdlp_proxy: str = Field(default='')
+    playlist_strategy: str = Field(default='first')
 
     # ffmpeg
     ffmpeg_path: str = Field(default='')
+
+
+    # logging
+    log_level: str = Field(default='INFO')
+    log_file: Path = Field(default=Path('runtime/logs/pipeline.log'))
 
     # whisper
     whisper_model: str = Field(default='large-v3')

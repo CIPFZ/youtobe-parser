@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 import tempfile
 import types
@@ -12,8 +13,10 @@ from unittest import mock
 class _FakeSettings:
     work_dir = Path('.')
     output_name = 'final_output'
+    metadata_dirname = 'metadata'
     cookie_file = ''
     ytdlp_proxy = ''
+    playlist_strategy = 'first'
 
 
 class PipelineE2ETests(unittest.TestCase):
@@ -39,7 +42,14 @@ class PipelineE2ETests(unittest.TestCase):
                 out.write_text('final')
 
             with mock.patch('app.pipeline.settings.work_dir', root), \
-                mock.patch('app.pipeline.download_media', return_value={'video_path': video, 'audio_path': audio}), \
+                mock.patch(
+                    'app.pipeline.download_media',
+                    return_value={
+                        'video_path': video,
+                        'audio_path': audio,
+                        'metadata': {'id': 'abc123', 'title': 'sample'},
+                    },
+                ), \
                 mock.patch('app.pipeline.FastWhisperTranscriber') as fw, \
                 mock.patch('app.pipeline.SubtitleTranslator') as tr, \
                 mock.patch('app.pipeline.merge_av_with_ass', side_effect=fake_merge):
@@ -52,6 +62,10 @@ class PipelineE2ETests(unittest.TestCase):
                 self.assertTrue(out.exists())
                 self.assertTrue((root / 'subtitles' / 'final_output.srt').exists())
                 self.assertTrue((root / 'subtitles' / 'final_output.ass').exists())
+                metadata_path = root / 'metadata' / 'final_output.video_info.json'
+                self.assertTrue(metadata_path.exists())
+                loaded = json.loads(metadata_path.read_text(encoding='utf-8'))
+                self.assertEqual(loaded['id'], 'abc123')
 
 
 if __name__ == '__main__':
