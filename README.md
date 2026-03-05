@@ -78,3 +78,20 @@ YTDLP_PROXY=socks5://127.0.0.1:7897
 ```
 
 该代理会用于 `yt-dlp` 的链接解析和媒体下载。
+
+
+## 测试
+
+分阶段测试脚本：
+
+```bash
+python tests/run_stage_checks.py
+```
+
+全量单元测试：
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+说明：测试已覆盖下载、转写、翻译、字幕生成、ffmpeg 调用和整条 Pipeline 编排（通过 mock 进行端到端流程验证）。
