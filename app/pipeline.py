@@ -7,7 +7,7 @@ from pathlib import Path
 from app.downloader import download_media
 from app.ffmpeg_tools import merge_av_with_ass
 from app.settings import settings
-from app.subtitles import write_ass, write_srt
+from app.subtitles import make_bilingual_segments, write_ass, write_srt
 from app.transcriber import FastWhisperTranscriber
 from app.translator import SubtitleTranslator
 
@@ -55,14 +55,15 @@ class Pipeline:
         write_srt(segments, srt_path)
         logger.info('SRT written. path=%s segments=%d', srt_path, len(segments))
 
-        logger.info('Stage 3/4: translate segments and write ASS')
+        logger.info('Stage 3/4: translate segments and write bilingual ASS')
         translated = SubtitleTranslator().translate(segments)
+        bilingual = make_bilingual_segments(segments, translated)
         ass_path = self.subtitle_dir / f'{stem}.ass'
-        write_ass(translated, ass_path)
-        logger.info('ASS written. path=%s segments=%d', ass_path, len(translated))
+        write_ass(bilingual, ass_path)
+        logger.info('ASS written (bilingual). path=%s segments=%d', ass_path, len(bilingual))
 
         logger.info('Stage 4/4: merge video + audio + ASS')
-        output_path = self.output_dir / f'{settings.output_name}.mp4'
+        output_path = self.output_dir / f'{stem}.mp4'
         merge_av_with_ass(video=video_path, audio=audio_path, ass=ass_path, out=output_path)
         logger.info('Merge completed. output=%s', output_path)
         return output_path
