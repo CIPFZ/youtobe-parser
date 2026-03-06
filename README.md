@@ -104,6 +104,11 @@ python -m unittest discover -s tests -v
 
 说明：测试已覆盖下载、转写、翻译、字幕生成、ffmpeg 调用和整条 Pipeline 编排（通过 mock 进行端到端流程验证）。
 
+- `runtime/downloads/`：下载的音视频
+- `runtime/subtitles/*.srt`：识别字幕
+- `runtime/subtitles/*.ass`：翻译后 ASS
+- `runtime/output/*.mp4`：最终成片
+- `runtime/metadata/*.video_info.json`：视频解析基础信息
 
 ## 日志
 
