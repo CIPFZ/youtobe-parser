@@ -181,6 +181,7 @@ WHISPER_MODELSCOPE_REPO=你的模型仓库ID
 - 视频默认优先下载 `bestvideo[ext=mp4][vcodec^=avc1]`（可通过 `YTDLP_VIDEO_FORMAT` 配置），音频优先下载 `bestaudio[ext=m4a]`。
 - 若目标扩展不可用，会自动回退到该视频 ID 的可用格式并记录 warning 日志。
 
+2. 或直接改为 ModelScope：
 
 ## 预下载 fast-whisper 模型
 
