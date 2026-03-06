@@ -12,6 +12,31 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 
+_AV1_DECODER_ERRORS = (
+    'Decoder (codec av1) not found',
+    'decoder for codec id 32797 not found',
+)
+
+
+def _all_ffmpeg_candidates() -> list[str]:
+    custom = settings.ffmpeg_path.strip()
+    if custom:
+        p = Path(custom).expanduser()
+        if p.exists() and p.is_file():
+            return [str(p)]
+        raise FileNotFoundError(f'Configured FFMPEG_PATH does not exist: {custom}')
+
+    cands: list[str] = []
+    system_ffmpeg = shutil.which('ffmpeg')
+    if system_ffmpeg:
+        cands.append(system_ffmpeg)
+
+    imageio_bin = imageio_ffmpeg.get_ffmpeg_exe()
+    if imageio_bin not in cands:
+        cands.append(imageio_bin)
+    return cands
+
+
 def ffmpeg_bin() -> str:
     """Resolve ffmpeg binary path.
 
@@ -20,28 +45,42 @@ def ffmpeg_bin() -> str:
     2) PATH lookup for "ffmpeg"
     3) imageio-ffmpeg managed binary
     """
-    custom = settings.ffmpeg_path.strip()
-    if custom:
-        p = Path(custom).expanduser()
-        if p.exists() and p.is_file():
-            logger.info('Using custom ffmpeg binary: %s', p)
-            return str(p)
-        raise FileNotFoundError(f'Configured FFMPEG_PATH does not exist: {custom}')
+    chosen = _all_ffmpeg_candidates()[0]
+    logger.info('Using ffmpeg binary: %s', chosen)
+    return chosen
 
-    system_ffmpeg = shutil.which('ffmpeg')
-    if system_ffmpeg:
-        logger.info('Using system ffmpeg binary: %s', system_ffmpeg)
-        return system_ffmpeg
 
-    resolved = imageio_ffmpeg.get_ffmpeg_exe()
-    logger.info('Using imageio-managed ffmpeg binary: %s', resolved)
-    return resolved
+def _run_cmd_with_binary(bin_path: str, args: list[str]) -> subprocess.CompletedProcess[str]:
+    cmd = [bin_path, '-y', *args]
+    logger.info('Running ffmpeg command: %s', ' '.join(cmd))
+    return subprocess.run(cmd, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 
 def run_ffmpeg(args: list[str]) -> None:
-    cmd = [ffmpeg_bin(), '-y', *args]
-    logger.info('Running ffmpeg command: %s', ' '.join(cmd))
-    subprocess.run(cmd, check=True)
+    candidates = _all_ffmpeg_candidates()
+    first_bin = candidates[0]
+    proc = _run_cmd_with_binary(first_bin, args)
+    if proc.returncode == 0:
+        return
+
+    # Fallback: some system ffmpeg builds (e.g., old snap packages) miss AV1 decoder.
+    # Retry with imageio-managed ffmpeg if available.
+    err = proc.stderr or ''
+    should_fallback = any(token in err for token in _AV1_DECODER_ERRORS)
+    if should_fallback and len(candidates) > 1:
+        fallback_bin = candidates[1]
+        logger.warning(
+            'Primary ffmpeg failed due to decoder limitation, retrying with fallback binary. '
+            'primary=%s fallback=%s',
+            first_bin,
+            fallback_bin,
+        )
+        proc2 = _run_cmd_with_binary(fallback_bin, args)
+        if proc2.returncode == 0:
+            return
+        raise subprocess.CalledProcessError(proc2.returncode, [fallback_bin, '-y', *args], output=proc2.stdout, stderr=proc2.stderr)
+
+    raise subprocess.CalledProcessError(proc.returncode, [first_bin, '-y', *args], output=proc.stdout, stderr=proc.stderr)
 
 
 def merge_av_with_ass(video: Path, audio: Path, ass: Path, out: Path) -> None:
