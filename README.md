@@ -106,11 +106,6 @@ python -m unittest discover -s tests -v
 
 说明：测试已覆盖下载、转写、翻译、字幕生成、ffmpeg 调用和整条 Pipeline 编排（通过 mock 进行端到端流程验证）。
 
-- `runtime/downloads/`：下载的音视频
-- `runtime/subtitles/*.srt`：识别字幕
-- `runtime/subtitles/*.ass`：翻译后 ASS
-- `runtime/output/*.mp4`：最终成片
-- `runtime/metadata/*.video_info.json`：视频解析基础信息
 
 ## 日志
 
@@ -174,3 +169,10 @@ WHISPER_MODELSCOPE_REPO=你的模型仓库ID
 ```
 
 3. 默认已开启 `WHISPER_MODEL_FALLBACK_TO_MODELSCOPE=true`，当 HF 拉取失败且配置了 ModelScope repo 时会自动回退。
+
+
+## 下载命名与格式策略
+
+- 文件名使用 `video_id`（例如 `abc123.mp4`、`abc123.m4a`），避免超长标题带来的路径问题。
+- 视频优先下载 `bestvideo[ext=mp4]`，音频优先下载 `bestaudio[ext=m4a]`。
+- 若目标扩展不可用，会自动回退到该视频 ID 的可用格式并记录 warning 日志。

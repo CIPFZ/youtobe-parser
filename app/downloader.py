@@ -35,6 +35,44 @@ def _build_video_metadata(info: dict[str, Any], source_url: str, normalized_url:
     }
 
 
+def _ytdlp_opts(out_dir: Path, stream_kind: str, cookie_file: str, proxy_url: str) -> dict[str, Any]:
+    ext = 'mp4' if stream_kind == 'video' else 'm4a'
+    selector = 'bestvideo[ext=mp4]/bestvideo' if stream_kind == 'video' else 'bestaudio[ext=m4a]/bestaudio'
+    opts: dict[str, Any] = {
+        'quiet': False,
+        'noplaylist': True,
+        'outtmpl': str(out_dir / '%(id)s.%(ext)s'),
+        'format': selector,
+    }
+    if cookie_file:
+        opts['cookiefile'] = cookie_file
+    if proxy_url:
+        opts['proxy'] = proxy_url
+    return opts
+
+
+def _download_stream(normalized_url: str, out_dir: Path, stream_kind: str, cookie_file: str, proxy_url: str) -> tuple[dict[str, Any], Path]:
+    opts = _ytdlp_opts(out_dir=out_dir, stream_kind=stream_kind, cookie_file=cookie_file, proxy_url=proxy_url)
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(normalized_url, download=True)
+
+    video_id = info.get('id')
+    if not video_id:
+        raise RuntimeError('yt-dlp did not return video id.')
+
+    ext = 'mp4' if stream_kind == 'video' else 'm4a'
+    target = out_dir / f'{video_id}.{ext}'
+    if target.exists():
+        return info, target
+
+    # fallback for edge cases where preferred ext is unavailable
+    fallback = sorted(out_dir.glob(f'{video_id}.*'))
+    if not fallback:
+        raise RuntimeError(f'Cannot find downloaded {stream_kind} file for id={video_id}')
+    logger.warning('Preferred %s extension %s not found, fallback=%s', stream_kind, ext, fallback[0])
+    return info, fallback[0]
+
+
 def download_media(
     url: str,
     out_dir: Path,
@@ -48,45 +86,26 @@ def download_media(
         raise ValueError('playlist_strategy currently supports only: first')
 
     normalized_url = _normalize_youtube_url_for_first_item(url)
-    opts: dict[str, Any] = {
-        'quiet': False,
-        'noplaylist': True,
-        'outtmpl': str(out_dir / '%(title).100s.%(ext)s'),
-        'format': 'bestvideo+bestaudio/best',
-    }
-    if cookie_file:
-        opts['cookiefile'] = cookie_file
-    if proxy_url:
-        opts['proxy'] = proxy_url
 
     if normalized_url != url:
         logger.info('Playlist-style URL normalized to first-item URL. from=%s to=%s', url, normalized_url)
 
     logger.info('yt-dlp start. url=%s proxy=%s output_dir=%s strategy=%s', normalized_url, proxy_url or 'none', out_dir, playlist_strategy)
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(normalized_url, download=True)
-        req = ydl.prepare_filename(info)
 
-    downloaded = Path(req)
-    stem = downloaded.stem
-
-    video_candidates = sorted(out_dir.glob(f'{stem}*.mp4')) + sorted(out_dir.glob(f'{stem}*.webm'))
-    audio_candidates = sorted(out_dir.glob(f'{stem}*.m4a')) + sorted(out_dir.glob(f'{stem}*.webm'))
-
-    if not video_candidates or not audio_candidates:
-        raise RuntimeError('无法找到下载后的音频/视频文件，请检查 yt-dlp 输出格式。')
+    video_info, video_path = _download_stream(normalized_url, out_dir, 'video', cookie_file, proxy_url)
+    _audio_info, audio_path = _download_stream(normalized_url, out_dir, 'audio', cookie_file, proxy_url)
 
     metadata = _build_video_metadata(
-        info=info,
+        info=video_info,
         source_url=url,
         normalized_url=normalized_url,
         playlist_strategy=playlist_strategy,
     )
 
-    logger.info('yt-dlp completed. title=%s video_candidates=%d audio_candidates=%d', info.get('title', stem), len(video_candidates), len(audio_candidates))
+    logger.info('yt-dlp completed. id=%s title=%s video=%s audio=%s', metadata.get('id'), metadata.get('title'), video_path, audio_path)
     return {
-        'title': info.get('title', stem),
-        'video_path': video_candidates[0],
-        'audio_path': audio_candidates[-1],
+        'title': video_info.get('title', video_info.get('id', 'unknown')),
+        'video_path': video_path,
+        'audio_path': audio_path,
         'metadata': metadata,
     }
