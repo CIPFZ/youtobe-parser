@@ -6,21 +6,24 @@ import sys
 from pathlib import Path
 
 STAGES = [
-    'tests.test_downloader_stage',
-    'tests.test_transcriber_stage',
-    'tests.test_translator_stage',
-    'tests.test_subtitles_stage',
-    'tests.test_ffmpeg_stage',
-    'tests.test_pipeline_e2e',
+    ('tests.test_downloader_stage', []),
+    ('tests.test_ffmpeg_stage', []),
+    ('tests.test_subtitles_stage', []),
+    ('tests.test_merge_ass_audio_video', []),
+    ('tests.test_transcriber_stage', []),
+    ('tests.test_translator_stage', []),
+    ('tests.test_pipeline_e2e', []),
 ]
 
 
 def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
-    for stage in STAGES:
-        print(f'===== running {stage} =====')
-        rc = subprocess.call([sys.executable, '-m', 'unittest', '-v', stage], cwd=repo_root)
+    for mod, extra_args in STAGES:
+        cmd = [sys.executable, '-m', mod, *extra_args]
+        print(f'===== running {mod} =====')
+        rc = subprocess.call(cmd, cwd=repo_root)
         if rc != 0:
+            print(f'[FAIL] {mod} rc={rc}')
             return rc
     print('all stage checks passed')
     return 0
