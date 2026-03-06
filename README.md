@@ -134,6 +134,9 @@ LOG_FILE=runtime/logs/pipeline.log
 
 这样可以保证主流程（单视频→单字幕→单输出）稳定可控。后续如果你要“整合集批处理”，我们可以再扩展 `all` 模式。
 
+当前默认策略是 `PLAYLIST_STRATEGY=first`：
+- 自动归一化为 `https://www.youtube.com/watch?v=DFdh8BrzJ_Y`
+- 只处理当前视频（不整单播放列表）
 
 ## Whisper 模型下载源
 
