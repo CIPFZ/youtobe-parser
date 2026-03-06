@@ -28,3 +28,5 @@ downloads/
 data/
 logs/
 models/whisper/
+runtime/
+uv.lock
