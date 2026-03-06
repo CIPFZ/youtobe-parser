@@ -20,21 +20,30 @@ from app.transcriber import (
 
 def main() -> int:
     setup_logging(settings.log_level, settings.log_file)
-    _apply_download_proxy_env(settings.whisper_download_proxy.strip())
+    try:
+        _apply_download_proxy_env(settings.whisper_download_proxy.strip())
 
-    source = settings.whisper_model_source.strip().lower()
-    model_ref = settings.whisper_model.strip()
+        source = settings.whisper_model_source.strip().lower()
+        model_ref = settings.whisper_model.strip()
 
-    if source == 'huggingface' and not Path(model_ref).expanduser().exists():
-        local_path = _download_huggingface_model_to_local(
-            model_ref=model_ref,
-            cache_dir=settings.whisper_model_cache_dir.expanduser().resolve(),
-        )
-    else:
-        local_path = _resolve_whisper_model_ref(source=source)
+        if source == 'huggingface' and not Path(model_ref).expanduser().exists():
+            local_path = _download_huggingface_model_to_local(
+                model_ref=model_ref,
+                cache_dir=settings.whisper_model_cache_dir.expanduser().resolve(),
+            )
+        else:
+            local_path = _resolve_whisper_model_ref(source=source)
 
-    print(f'Model prepared locally: {local_path}')
-    return 0
+        print(f'Model prepared locally: {local_path}')
+        return 0
+    except Exception as exc:
+        print(f'[ERROR] model prepare failed: {exc}')
+        print('Tips:')
+        print('  1) If using socks proxy, install dependency: pip install socksio')
+        print('  2) Or switch to ModelScope in .env:')
+        print('     WHISPER_MODEL_SOURCE=modelscope')
+        print('     WHISPER_MODELSCOPE_REPO=<your_repo_id>')
+        return 1
 
 
 if __name__ == '__main__':

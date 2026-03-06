@@ -15,6 +15,16 @@ logger = logging.getLogger(__name__)
 def _apply_download_proxy_env(proxy_url: str) -> None:
     if not proxy_url:
         return
+
+    if proxy_url.lower().startswith('socks'):
+        try:
+            import socksio  # noqa: F401
+        except Exception as exc:
+            raise RuntimeError(
+                'SOCKS proxy detected but dependency `socksio` is missing. '
+                'Please run: pip install socksio'
+            ) from exc
+
     os.environ['HTTP_PROXY'] = proxy_url
     os.environ['HTTPS_PROXY'] = proxy_url
     os.environ['ALL_PROXY'] = proxy_url

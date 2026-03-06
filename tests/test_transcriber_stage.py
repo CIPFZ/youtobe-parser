@@ -133,12 +133,23 @@ class TranscriberStageTests(unittest.TestCase):
         self.assertEqual(transcriber._auto_select_device('auto'), 'cpu')
         self.assertEqual(transcriber._auto_select_compute_type('auto', 'cpu'), 'int8')
 
+    def test_socks_proxy_without_socksio_dependency(self) -> None:
+        sys.modules.pop('socksio', None)
+        sys.modules['faster_whisper'] = types.SimpleNamespace(WhisperModel=_FakeWhisperModel)
+        sys.modules['app.settings'] = types.SimpleNamespace(settings=_FakeSettings())
+        import app.transcriber as transcriber
+        importlib.reload(transcriber)
+
+        with self.assertRaises(RuntimeError):
+            transcriber._apply_download_proxy_env('socks5://127.0.0.1:7897')
+
     def test_apply_download_proxy_env(self) -> None:
         sys.modules['faster_whisper'] = types.SimpleNamespace(WhisperModel=_FakeWhisperModel)
         sys.modules['app.settings'] = types.SimpleNamespace(settings=_FakeSettings())
         import app.transcriber as transcriber
         importlib.reload(transcriber)
 
+        sys.modules['socksio'] = types.SimpleNamespace()
         transcriber._apply_download_proxy_env('socks5://127.0.0.1:7897')
         self.assertEqual(os.environ.get('HTTP_PROXY'), 'socks5://127.0.0.1:7897')
         self.assertEqual(os.environ.get('HTTPS_PROXY'), 'socks5://127.0.0.1:7897')
