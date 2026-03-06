@@ -62,7 +62,7 @@ class DownloaderStageTests(unittest.TestCase):
 
             self.assertEqual(video_opts['outtmpl'], str(out / '%(id)s.%(ext)s'))
             self.assertEqual(audio_opts['outtmpl'], str(out / '%(id)s.%(ext)s'))
-            self.assertEqual(video_opts['format'], 'bestvideo[ext=mp4]/bestvideo')
+            self.assertEqual(video_opts['format'], 'bestvideo[ext=mp4][vcodec^=avc1]/bestvideo[ext=mp4]/bestvideo')
             self.assertEqual(audio_opts['format'], 'bestaudio[ext=m4a]/bestaudio')
             self.assertEqual(video_opts['cookiefile'], '/tmp/cookies.txt')
             self.assertEqual(audio_opts['proxy'], 'socks5://127.0.0.1:7897')

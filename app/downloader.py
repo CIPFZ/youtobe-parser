@@ -7,6 +7,8 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import yt_dlp
 
+from app.settings import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,7 +39,7 @@ def _build_video_metadata(info: dict[str, Any], source_url: str, normalized_url:
 
 def _ytdlp_opts(out_dir: Path, stream_kind: str, cookie_file: str, proxy_url: str) -> dict[str, Any]:
     ext = 'mp4' if stream_kind == 'video' else 'm4a'
-    selector = 'bestvideo[ext=mp4]/bestvideo' if stream_kind == 'video' else 'bestaudio[ext=m4a]/bestaudio'
+    selector = settings.ytdlp_video_format if stream_kind == 'video' else settings.ytdlp_audio_format
     opts: dict[str, Any] = {
         'quiet': False,
         'noplaylist': True,
@@ -90,7 +92,7 @@ def download_media(
     if normalized_url != url:
         logger.info('Playlist-style URL normalized to first-item URL. from=%s to=%s', url, normalized_url)
 
-    logger.info('yt-dlp start. url=%s proxy=%s output_dir=%s strategy=%s', normalized_url, proxy_url or 'none', out_dir, playlist_strategy)
+    logger.info('yt-dlp start. url=%s proxy=%s output_dir=%s strategy=%s video_format=%s audio_format=%s', normalized_url, proxy_url or 'none', out_dir, playlist_strategy, settings.ytdlp_video_format, settings.ytdlp_audio_format)
 
     video_info, video_path = _download_stream(normalized_url, out_dir, 'video', cookie_file, proxy_url)
     _audio_info, audio_path = _download_stream(normalized_url, out_dir, 'audio', cookie_file, proxy_url)
