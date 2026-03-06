@@ -39,6 +39,7 @@ pip install -e .
 - `WHISPER_LANGUAGE`（默认 `en`）
 - `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`
 - `TARGET_LANGUAGE`（默认 `zh-CN`）
+- `TRANSLATION_BATCH_SIZE`（默认 `20`，LLM 批量翻译大小）
 - `WORK_DIR`（默认 `runtime`）
 - `OUTPUT_NAME`（默认 `final_output`）
 - `METADATA_DIRNAME`（默认 `metadata`，保存视频基础信息 JSON）
@@ -134,6 +135,7 @@ LOG_FILE=runtime/logs/pipeline.log
 
 这样可以保证主流程（单视频→单字幕→单输出）稳定可控。后续如果你要“整合集批处理”，我们可以再扩展 `all` 模式。
 
+这样可以保证主流程（单视频→单字幕→单输出）稳定可控。后续如果你要“整合集批处理”，我们可以再扩展 `all` 模式。
 
 ## Whisper 模型下载源
 
@@ -203,3 +205,8 @@ pip install socksio
 ```
 
 否则 `httpx` 会报错：`Using SOCKS proxy, but the socksio package is not installed.`
+
+
+## 翻译策略
+
+当前翻译采用 **批量翻译**（默认每批 20 条），通过“序号 + 制表符”的返回格式保证行数与顺序稳定，避免逐条翻译导致上下文残缺。

@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     openai_base_url: str = Field(default='https://api.openai.com/v1')
     openai_model: str = Field(default='gpt-4o-mini')
     target_language: str = Field(default='zh-CN')
+    translation_batch_size: int = Field(default=20)
 
 
 settings = Settings()
