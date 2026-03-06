@@ -25,6 +25,12 @@ class Pipeline:
             d.mkdir(parents=True, exist_ok=True)
         logger.info('Pipeline initialized. work_dir=%s', self.work_dir)
 
+    @staticmethod
+    def _artifact_stem(media: dict) -> str:
+        metadata = media.get('metadata') or {}
+        video_id = str(metadata.get('id') or '').strip()
+        return video_id or settings.output_name
+
     def run(self, url: str) -> Path:
         logger.info('Stage 1/4: parse and download media')
         media = download_media(
@@ -36,21 +42,22 @@ class Pipeline:
         )
         video_path = Path(media['video_path'])
         audio_path = Path(media['audio_path'])
-        logger.info('Downloaded media. video=%s audio=%s', video_path, audio_path)
+        stem = self._artifact_stem(media)
+        logger.info('Downloaded media. video=%s audio=%s stem=%s', video_path, audio_path, stem)
 
-        metadata_path = self.metadata_dir / f'{settings.output_name}.video_info.json'
+        metadata_path = self.metadata_dir / f'{stem}.video_info.json'
         metadata_path.write_text(json.dumps(media.get('metadata', {}), ensure_ascii=False, indent=2), encoding='utf-8')
         logger.info('Video metadata written. path=%s', metadata_path)
 
         logger.info('Stage 2/4: transcribe audio to SRT segments')
         segments = FastWhisperTranscriber().transcribe(str(audio_path))
-        srt_path = self.subtitle_dir / f"{settings.output_name}.srt"
+        srt_path = self.subtitle_dir / f'{stem}.srt'
         write_srt(segments, srt_path)
         logger.info('SRT written. path=%s segments=%d', srt_path, len(segments))
 
         logger.info('Stage 3/4: translate segments and write ASS')
         translated = SubtitleTranslator().translate(segments)
-        ass_path = self.subtitle_dir / f"{settings.output_name}.ass"
+        ass_path = self.subtitle_dir / f'{stem}.ass'
         write_ass(translated, ass_path)
         logger.info('ASS written. path=%s segments=%d', ass_path, len(translated))
 

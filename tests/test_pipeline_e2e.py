@@ -60,9 +60,9 @@ class PipelineE2ETests(unittest.TestCase):
                 out = pipeline.Pipeline().run('https://example.com/video')
 
                 self.assertTrue(out.exists())
-                self.assertTrue((root / 'subtitles' / 'final_output.srt').exists())
-                self.assertTrue((root / 'subtitles' / 'final_output.ass').exists())
-                metadata_path = root / 'metadata' / 'final_output.video_info.json'
+                self.assertTrue((root / 'subtitles' / 'abc123.srt').exists())
+                self.assertTrue((root / 'subtitles' / 'abc123.ass').exists())
+                metadata_path = root / 'metadata' / 'abc123.video_info.json'
                 self.assertTrue(metadata_path.exists())
                 loaded = json.loads(metadata_path.read_text(encoding='utf-8'))
                 self.assertEqual(loaded['id'], 'abc123')

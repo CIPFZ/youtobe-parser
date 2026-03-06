@@ -46,6 +46,8 @@ pip install -e .
 - `FFMPEG_PATH`（可选，自定义 ffmpeg 可执行文件绝对路径）
 - `YTDLP_PROXY`（可选，视频解析与下载代理，例如 `socks5://127.0.0.1:7897`）
 - `PLAYLIST_STRATEGY`（默认 `first`，合集链接仅下载当前视频/首个视频）
+- `YTDLP_VIDEO_FORMAT`（默认优先 `avc1` 的 mp4，避免旧 ffmpeg 无法解码 av1）
+- `YTDLP_AUDIO_FORMAT`（默认 `bestaudio[ext=m4a]/bestaudio`）
 - `LOG_LEVEL`（日志级别，默认 `INFO`）
 - `LOG_FILE`（日志文件路径，默认 `runtime/logs/pipeline.log`）
 
@@ -62,10 +64,10 @@ yp-run "https://www.youtube.com/watch?v=..."
 输出目录：
 
 - `runtime/downloads/`：下载的音视频
-- `runtime/subtitles/*.srt`：识别字幕
-- `runtime/subtitles/*.ass`：翻译后 ASS
-- `runtime/output/*.mp4`：最终成片
-- `runtime/metadata/*.video_info.json`：视频解析基础信息
+- `runtime/subtitles/*.srt`：识别字幕（按视频 `id` 命名）
+- `runtime/subtitles/*.ass`：翻译后 ASS（按视频 `id` 命名）
+- `runtime/output/*.mp4`：最终成片（默认 `OUTPUT_NAME.mp4`）
+- `runtime/metadata/*.video_info.json`：视频解析基础信息（按视频 `id` 命名）
 
 ## 代码结构
 
@@ -135,7 +137,6 @@ LOG_FILE=runtime/logs/pipeline.log
 
 这样可以保证主流程（单视频→单字幕→单输出）稳定可控。后续如果你要“整合集批处理”，我们可以再扩展 `all` 模式。
 
-这样可以保证主流程（单视频→单字幕→单输出）稳定可控。后续如果你要“整合集批处理”，我们可以再扩展 `all` 模式。
 
 ## Whisper 模型下载源
 
@@ -177,9 +178,10 @@ WHISPER_MODELSCOPE_REPO=你的模型仓库ID
 ## 下载命名与格式策略
 
 - 文件名使用 `video_id`（例如 `abc123.mp4`、`abc123.m4a`），避免超长标题带来的路径问题。
-- 视频优先下载 `bestvideo[ext=mp4]`，音频优先下载 `bestaudio[ext=m4a]`。
+- 视频默认优先下载 `bestvideo[ext=mp4][vcodec^=avc1]`（可通过 `YTDLP_VIDEO_FORMAT` 配置），音频优先下载 `bestaudio[ext=m4a]`。
 - 若目标扩展不可用，会自动回退到该视频 ID 的可用格式并记录 warning 日志。
 
+2. 或直接改为 ModelScope：
 
 ## 预下载 fast-whisper 模型
 
@@ -210,3 +212,14 @@ pip install socksio
 ## 翻译策略
 
 当前翻译采用 **批量翻译**（默认每批 20 条），通过“序号 + 制表符”的返回格式保证行数与顺序稳定，避免逐条翻译导致上下文残缺。
+
+
+### FFmpeg 无法解码 AV1 的处理
+
+如果你遇到 `Decoder (codec av1) not found`，说明本机 ffmpeg 对 AV1 解码支持不足。
+
+本项目默认已优先下载 `avc1` 编码视频；你也可以在 `.env` 里强制：
+
+```env
+YTDLP_VIDEO_FORMAT=bestvideo[ext=mp4][vcodec^=avc1]/bestvideo[ext=mp4]/bestvideo
+```
