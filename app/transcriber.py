@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from faster_whisper import WhisperModel
@@ -11,9 +12,18 @@ from app.subtitles import Segment
 logger = logging.getLogger(__name__)
 
 
-def _resolve_whisper_model_ref() -> str:
+def _apply_download_proxy_env(proxy_url: str) -> None:
+    if not proxy_url:
+        return
+    os.environ['HTTP_PROXY'] = proxy_url
+    os.environ['HTTPS_PROXY'] = proxy_url
+    os.environ['ALL_PROXY'] = proxy_url
+    logger.info('Applied whisper download proxy via env: %s', proxy_url)
+
+
+def _resolve_whisper_model_ref(source: str | None = None) -> str:
     """Resolve faster-whisper model ref/path based on configured source."""
-    source = settings.whisper_model_source.strip().lower()
+    source = (source or settings.whisper_model_source).strip().lower()
     model_ref = settings.whisper_model.strip()
 
     # local path always wins
@@ -48,7 +58,10 @@ def _resolve_whisper_model_ref() -> str:
 
 class FastWhisperTranscriber:
     def __init__(self) -> None:
-        resolved_model = _resolve_whisper_model_ref()
+        source = settings.whisper_model_source.strip().lower()
+        _apply_download_proxy_env(settings.whisper_download_proxy.strip())
+
+        resolved_model = _resolve_whisper_model_ref(source=source)
         logger.info(
             'Loading faster-whisper model. source=%s model_ref=%s resolved=%s device=%s compute_type=%s',
             settings.whisper_model_source,
@@ -57,11 +70,32 @@ class FastWhisperTranscriber:
             settings.whisper_device,
             settings.whisper_compute_type,
         )
-        self.model = WhisperModel(
-            resolved_model,
-            device=settings.whisper_device,
-            compute_type=settings.whisper_compute_type,
-        )
+        try:
+            self.model = WhisperModel(
+                resolved_model,
+                device=settings.whisper_device,
+                compute_type=settings.whisper_compute_type,
+            )
+        except Exception as exc:
+            if (
+                source == 'huggingface'
+                and settings.whisper_model_fallback_to_modelscope
+                and settings.whisper_modelscope_repo.strip()
+            ):
+                logger.warning('HuggingFace model load failed, fallback to ModelScope is enabled. err=%s', exc)
+                ms_model = _resolve_whisper_model_ref(source='modelscope')
+                self.model = WhisperModel(
+                    ms_model,
+                    device=settings.whisper_device,
+                    compute_type=settings.whisper_compute_type,
+                )
+                logger.info('Loaded whisper model from ModelScope fallback. path=%s', ms_model)
+            else:
+                raise RuntimeError(
+                    'Whisper model load failed. If HuggingFace is unreachable, set '
+                    'WHISPER_MODEL_SOURCE=modelscope and WHISPER_MODELSCOPE_REPO, '
+                    'or configure WHISPER_DOWNLOAD_PROXY.'
+                ) from exc
 
     def transcribe(self, audio_path: str) -> list[Segment]:
         logger.info('Transcription started. audio=%s language=%s', audio_path, settings.whisper_language)

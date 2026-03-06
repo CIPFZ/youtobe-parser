@@ -31,6 +31,8 @@ pip install -e .
 - `WHISPER_MODEL_SOURCE`（`huggingface` 或 `modelscope`，默认 `huggingface`）
 - `WHISPER_MODELSCOPE_REPO`（当 source=modelscope 时必填）
 - `WHISPER_MODEL_CACHE_DIR`（模型下载缓存目录，默认 `runtime/models`）
+- `WHISPER_DOWNLOAD_PROXY`（Whisper 模型下载代理）
+- `WHISPER_MODEL_FALLBACK_TO_MODELSCOPE`（默认 `true`，HF 失败时自动回退）
 - `WHISPER_DEVICE`（默认 `auto`，GPU 推荐 `cuda`）
 - `WHISPER_COMPUTE_TYPE`（默认 `auto`）
 - `WHISPER_LANGUAGE`（默认 `en`）
@@ -152,3 +154,23 @@ WHISPER_MODEL_CACHE_DIR=runtime/models
 说明：
 - `modelscope` 会先把模型下载到本地缓存目录，再由 `faster-whisper` 从本地路径加载。
 - 如果你直接把 `WHISPER_MODEL` 设成本地目录路径，则优先使用本地模型路径。
+
+
+### HF 网络失败建议
+
+如果你遇到 `huggingface_hub ... Network is unreachable`：
+
+1. 先配置下载代理（可与 `YTDLP_PROXY` 一致）：
+
+```env
+WHISPER_DOWNLOAD_PROXY=socks5://127.0.0.1:7897
+```
+
+2. 或直接改为 ModelScope：
+
+```env
+WHISPER_MODEL_SOURCE=modelscope
+WHISPER_MODELSCOPE_REPO=你的模型仓库ID
+```
+
+3. 默认已开启 `WHISPER_MODEL_FALLBACK_TO_MODELSCOPE=true`，当 HF 拉取失败且配置了 ModelScope repo 时会自动回退。

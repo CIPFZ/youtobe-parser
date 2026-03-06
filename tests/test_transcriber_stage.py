@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 import tempfile
 import types
@@ -30,6 +31,8 @@ class _FakeSettings:
     whisper_model_source = 'huggingface'
     whisper_modelscope_repo = ''
     whisper_model_cache_dir = Path('/tmp/runtime-models')
+    whisper_download_proxy = ''
+    whisper_model_fallback_to_modelscope = True
     whisper_device = 'cpu'
     whisper_compute_type = 'int8'
     whisper_language = 'en'
@@ -70,7 +73,7 @@ class TranscriberStageTests(unittest.TestCase):
         import app.transcriber as transcriber
         importlib.reload(transcriber)
 
-        resolved = transcriber._resolve_whisper_model_ref()
+        resolved = transcriber._resolve_whisper_model_ref(source='modelscope')
         self.assertEqual(resolved, '/tmp/ms_model')
         self.assertEqual(calls['repo_id'], 'demo/repo')
 
@@ -90,8 +93,18 @@ class TranscriberStageTests(unittest.TestCase):
             import app.transcriber as transcriber
             importlib.reload(transcriber)
 
-            resolved = transcriber._resolve_whisper_model_ref()
+            resolved = transcriber._resolve_whisper_model_ref(source='modelscope')
             self.assertEqual(resolved, str(local))
+
+    def test_apply_download_proxy_env(self) -> None:
+        sys.modules['faster_whisper'] = types.SimpleNamespace(WhisperModel=_FakeWhisperModel)
+        sys.modules['app.settings'] = types.SimpleNamespace(settings=_FakeSettings())
+        import app.transcriber as transcriber
+        importlib.reload(transcriber)
+
+        transcriber._apply_download_proxy_env('socks5://127.0.0.1:7897')
+        self.assertEqual(os.environ.get('HTTP_PROXY'), 'socks5://127.0.0.1:7897')
+        self.assertEqual(os.environ.get('HTTPS_PROXY'), 'socks5://127.0.0.1:7897')
 
 
 if __name__ == '__main__':

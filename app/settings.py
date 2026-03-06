@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     whisper_model_source: str = Field(default='huggingface')
     whisper_modelscope_repo: str = Field(default='')
     whisper_model_cache_dir: Path = Field(default=Path('runtime/models'))
+    whisper_download_proxy: str = Field(default='')
+    whisper_model_fallback_to_modelscope: bool = Field(default=True)
     whisper_device: str = Field(default='auto')
     whisper_compute_type: str = Field(default='auto')
     whisper_language: str = Field(default='en')
