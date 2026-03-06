@@ -31,6 +31,7 @@ pip install -e .
 - `WHISPER_MODEL_SOURCE`（`huggingface` 或 `modelscope`，默认 `huggingface`）
 - `WHISPER_MODELSCOPE_REPO`（当 source=modelscope 时必填）
 - `WHISPER_MODEL_CACHE_DIR`（模型下载缓存目录，默认 `runtime/models`）
+- `WHISPER_DOWNLOAD_TO_LOCAL`（默认 `true`，HF 模型先下载到本地目录再加载）
 - `WHISPER_DOWNLOAD_PROXY`（Whisper 模型下载代理）
 - `WHISPER_MODEL_FALLBACK_TO_MODELSCOPE`（默认 `true`，HF 失败时自动回退）
 - `WHISPER_DEVICE`（默认 `auto`，会自动选择 GPU/CPU；可强制为 `cuda` 或 `cpu`）
@@ -189,7 +190,7 @@ WHISPER_MODELSCOPE_REPO=你的模型仓库ID
 python tests/download_fast_whisper_model.py
 ```
 
-该脚本会按 `.env` 里的 `WHISPER_MODEL_SOURCE` / `WHISPER_MODELSCOPE_REPO` / `WHISPER_DOWNLOAD_PROXY` 进行模型准备。
+该脚本会按 `.env` 里的 `WHISPER_MODEL_SOURCE` / `WHISPER_MODELSCOPE_REPO` / `WHISPER_MODEL_CACHE_DIR` / `WHISPER_DOWNLOAD_PROXY` 进行模型下载并返回本地路径。
 
 同时当 `WHISPER_DEVICE=auto` 时，程序会自动检测是否有 CUDA：
 - 有 CUDA -> 使用 `cuda + float16`

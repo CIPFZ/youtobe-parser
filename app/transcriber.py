@@ -46,6 +46,17 @@ def _auto_select_compute_type(requested_compute_type: str, device: str) -> str:
     return chosen
 
 
+def _download_huggingface_model_to_local(model_ref: str, cache_dir: Path) -> str:
+    """Download fast-whisper model from HF and return local directory path."""
+    from faster_whisper.utils import download_model
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    logger.info('Downloading whisper model from HuggingFace. model=%s cache_dir=%s', model_ref, cache_dir)
+    local_dir = download_model(model_ref, output_dir=str(cache_dir))
+    logger.info('HuggingFace model ready: %s', local_dir)
+    return str(local_dir)
+
+
 def _resolve_whisper_model_ref(source: str | None = None) -> str:
     """Resolve faster-whisper model ref/path based on configured source."""
     source = (source or settings.whisper_model_source).strip().lower()
@@ -58,6 +69,9 @@ def _resolve_whisper_model_ref(source: str | None = None) -> str:
         return local_path
 
     if source == 'huggingface':
+        if settings.whisper_download_to_local:
+            cache_dir = settings.whisper_model_cache_dir.expanduser().resolve()
+            return _download_huggingface_model_to_local(model_ref, cache_dir)
         return model_ref
 
     if source == 'modelscope':

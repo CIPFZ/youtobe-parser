@@ -31,6 +31,7 @@ class _FakeSettings:
     whisper_model_source = 'huggingface'
     whisper_modelscope_repo = ''
     whisper_model_cache_dir = Path('/tmp/runtime-models')
+    whisper_download_to_local = True
     whisper_download_proxy = ''
     whisper_model_fallback_to_modelscope = True
     whisper_device = 'cpu'
@@ -50,6 +51,24 @@ class TranscriberStageTests(unittest.TestCase):
 
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].text, 'hello')
+
+
+    def test_huggingface_download_to_local(self) -> None:
+        class _HFSettings(_FakeSettings):
+            whisper_model_source = 'huggingface'
+            whisper_download_to_local = True
+            whisper_model = 'large-v3'
+
+        fake_utils = types.SimpleNamespace(download_model=lambda model_ref, output_dir: '/tmp/hf_model')
+        sys.modules['faster_whisper'] = types.SimpleNamespace(WhisperModel=_FakeWhisperModel)
+        sys.modules['faster_whisper.utils'] = fake_utils
+        sys.modules['app.settings'] = types.SimpleNamespace(settings=_HFSettings())
+
+        import app.transcriber as transcriber
+        importlib.reload(transcriber)
+
+        resolved = transcriber._resolve_whisper_model_ref(source='huggingface')
+        self.assertEqual(resolved, '/tmp/hf_model')
 
     def test_modelscope_download_flow(self) -> None:
         class _MsSettings(_FakeSettings):
