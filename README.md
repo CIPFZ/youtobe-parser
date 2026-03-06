@@ -1,286 +1,211 @@
-# youtobe-workflow
+# youtobe-parser (纯 Python 重构版)
 
-当前目标：基于 **sogou/workflow** 提供 Web API，并在接口模块中集成 **FFmpeg C API** 完成音视频合并（先做一个简单可用功能）。
+从 0 开始重构，仅保留核心业务流程：
 
-## 推荐部署方式：Docker（避免本地缺库）
+1. 链接解析 + 下载音频/视频（`yt-dlp`）
+2. `fast-whisper` 音频识别，生成 `SRT`
+3. 翻译字幕并转换成 `ASS`
+4. `ASS + 音频 + 视频` 合并成最终 `MP4`
 
-你遇到的 `libworkflow.so / libavformat.so not found` 本质上是运行环境缺动态库。对于当前阶段，**最稳妥方式就是直接用 Docker 部署运行**。
+## 设计目标
 
-### 1) 构建并启动
+- **高效**：全链路纯 Python，减少多服务通信开销。
+- **快捷**：单命令跑完整流程。
+- **可迁移**：默认可使用 `imageio-ffmpeg` 自动下载项目专用二进制，也支持自定义 `ffmpeg` 路径。
+- **GPU 兼容**：`faster-whisper` 原生支持 CUDA 场景。
+
+## 安装
 
 ```bash
-mkdir -p data/input data/output models/whisper
-LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose up --build -d
+python -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e .
+```
 
-# 或者直接跑一键端到端脚本（会自动执行 health/merge/asr/task 轮询）
-bash scripts/e2e_local.sh
+## 环境变量（可选）
+
+复制 `.env.example` 到 `.env` 后按需修改：
+
+- `WHISPER_MODEL`（默认 `large-v3`）
+- `WHISPER_MODEL_SOURCE`（`huggingface` 或 `modelscope`，默认 `huggingface`）
+- `WHISPER_MODELSCOPE_REPO`（当 source=modelscope 时必填）
+- `WHISPER_MODEL_CACHE_DIR`（模型下载缓存目录，默认 `runtime/models`）
+- `WHISPER_DOWNLOAD_TO_LOCAL`（默认 `true`，HF 模型先下载到本地目录再加载）
+- `WHISPER_DOWNLOAD_PROXY`（Whisper 模型下载代理）
+- `WHISPER_MODEL_FALLBACK_TO_MODELSCOPE`（默认 `true`，HF 失败时自动回退）
+- `WHISPER_DEVICE`（默认 `auto`，会自动选择 GPU/CPU；可强制为 `cuda` 或 `cpu`）
+- `WHISPER_COMPUTE_TYPE`（默认 `auto`）
+- `WHISPER_LANGUAGE`（默认 `en`）
+- `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`
+- `TARGET_LANGUAGE`（默认 `zh-CN`）
+- `TRANSLATION_BATCH_SIZE`（默认 `20`，LLM 批量翻译大小）
+- `WORK_DIR`（默认 `runtime`）
+- `OUTPUT_NAME`（默认 `final_output`）
+- `METADATA_DIRNAME`（默认 `metadata`，保存视频基础信息 JSON）
+- `FFMPEG_PATH`（可选，自定义 ffmpeg 可执行文件绝对路径）
+- `YTDLP_PROXY`（可选，视频解析与下载代理，例如 `socks5://127.0.0.1:7897`）
+- `PLAYLIST_STRATEGY`（默认 `first`，合集链接仅下载当前视频/首个视频）
+- `LOG_LEVEL`（日志级别，默认 `INFO`）
+- `LOG_FILE`（日志文件路径，默认 `runtime/logs/pipeline.log`）
+
+> 不配置 `OPENAI_API_KEY` 时，翻译阶段会跳过（直接使用原文）。
+
+## 运行
+
+```bash
+python main.py "https://www.youtube.com/watch?v=..."
+# 或
+yp-run "https://www.youtube.com/watch?v=..."
+```
+
+输出目录：
+
+- `runtime/downloads/`：下载的音视频
+- `runtime/subtitles/*.srt`：识别字幕（按视频 `id` 命名）
+- `runtime/subtitles/*.ass`：翻译后 ASS（按视频 `id` 命名）
+- `runtime/output/*.mp4`：最终成片（默认 `OUTPUT_NAME.mp4`）
+- `runtime/metadata/*.video_info.json`：视频解析基础信息（按视频 `id` 命名）
+
+## 代码结构
+
+- `app/pipeline.py`：总流程编排
+- `app/downloader.py`：下载与媒体定位
+- `app/transcriber.py`：fast-whisper 封装
+- `app/translator.py`：字幕翻译
+- `app/subtitles.py`：SRT/ASS 读写
+- `app/ffmpeg_tools.py`：项目内 ffmpeg 调用
+
+## 仓库清理说明
+
+已删除历史遗留的 `server/`、`scripts/`、`docs/`、`docker-compose.yml`、旧 CI 工作流与旧 lock 文件，仅保留当前纯 Python 流程所需代码。
+
+
+## 代理示例
+
+如果你本地使用代理（如 clash/v2ray），可在 `.env` 中配置：
+
+```env
+YTDLP_PROXY=socks5://127.0.0.1:7897
+```
+
+该代理会用于 `yt-dlp` 的链接解析和媒体下载。
+
+
+## 测试
+
+分阶段测试脚本：
+
+```bash
+python tests/run_stage_checks.py
+```
+
+全量单元测试：
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+说明：测试已覆盖下载、转写、翻译、字幕生成、ffmpeg 调用和整条 Pipeline 编排（通过 mock 进行端到端流程验证）。
+
+
+## 日志
+
+流程会输出到控制台并写入日志文件。
+
+默认日志文件：`runtime/logs/pipeline.log`
+
+你可以通过 `.env` 配置：
+
+```env
+LOG_LEVEL=INFO
+LOG_FILE=runtime/logs/pipeline.log
 ```
 
 
-### Python 一键脚本配置（推荐使用 .env）
+## 合集链接策略
 
-先准备配置文件：
+针对如下链接：
 
-```bash
-cp .env.example .env
+`https://www.youtube.com/watch?v=DFdh8BrzJ_Y&list=RDDFdh8BrzJ_Y&start_radio=1`
+
+当前默认策略是 `PLAYLIST_STRATEGY=first`：
+- 自动归一化为 `https://www.youtube.com/watch?v=DFdh8BrzJ_Y`
+- 只处理当前视频（不整单播放列表）
+
+这样可以保证主流程（单视频→单字幕→单输出）稳定可控。后续如果你要“整合集批处理”，我们可以再扩展 `all` 模式。
+
+
+## Whisper 模型下载源
+
+默认使用 HuggingFace（`WHISPER_MODEL_SOURCE=huggingface`）。
+
+如果 HuggingFace 网络不稳定，可以切换到 ModelScope：
+
+```env
+WHISPER_MODEL_SOURCE=modelscope
+WHISPER_MODELSCOPE_REPO=你的模型仓库ID
+WHISPER_MODEL_CACHE_DIR=runtime/models
 ```
 
-至少需要填写：
+说明：
+- `modelscope` 会先把模型下载到本地缓存目录，再由 `faster-whisper` 从本地路径加载。
+- 如果你直接把 `WHISPER_MODEL` 设成本地目录路径，则优先使用本地模型路径。
 
-- `OPENAI_API_KEY`
-- `WHISPER_MODEL_DIR`（默认 `/models/whisper`）
-- `WHISPER_MODEL_NAME`（默认 `ggml-base.en.bin`）
 
-运行 `main.py` 时会自动读取 `.env`（也可用 `--env-file` 指定其他路径），CLI 参数仅作为覆盖项。
+### HF 网络失败建议
 
-### 2) 查看服务日志
+如果你遇到 `huggingface_hub ... Network is unreachable`：
 
-```bash
-docker compose logs -f av-service
+1. 先配置下载代理（可与 `YTDLP_PROXY` 一致）：
+
+```env
+WHISPER_DOWNLOAD_PROXY=socks5://127.0.0.1:7897
 ```
 
-> 已默认按 `LOCAL_UID/LOCAL_GID` 运行容器进程，避免输出文件归属 `root:root`。
+2. 或直接改为 ModelScope：
 
-### 3) 健康检查
-
-```bash
-curl http://127.0.0.1:8888/healthz
+```env
+WHISPER_MODEL_SOURCE=modelscope
+WHISPER_MODELSCOPE_REPO=你的模型仓库ID
 ```
 
-### 4) 提交合并任务
+3. 默认已开启 `WHISPER_MODEL_FALLBACK_TO_MODELSCOPE=true`，当 HF 拉取失败且配置了 ModelScope repo 时会自动回退。
+
+
+## 下载命名与格式策略
+
+- 文件名使用 `video_id`（例如 `abc123.mp4`、`abc123.m4a`），避免超长标题带来的路径问题。
+- 视频优先下载 `bestvideo[ext=mp4]`，音频优先下载 `bestaudio[ext=m4a]`。
+- 若目标扩展不可用，会自动回退到该视频 ID 的可用格式并记录 warning 日志。
+
+
+## 预下载 fast-whisper 模型
+
+在正式跑主流程前，可以先执行：
 
 ```bash
-curl -X POST http://127.0.0.1:8888/api/v1/merge \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "video_path": "/data/input/video.mp4",
-    "audio_path": "/data/input/audio.m4a",
-    "output_path": "/data/output/out.mp4"
-  }'
+python tests/download_fast_whisper_model.py
 ```
 
-### 4.1) 提交 m4a -> wav 转换任务（异步）
+该脚本会按 `.env` 里的 `WHISPER_MODEL_SOURCE` / `WHISPER_MODELSCOPE_REPO` / `WHISPER_MODEL_CACHE_DIR` / `WHISPER_DOWNLOAD_PROXY` 进行模型下载并返回本地路径。
+
+同时当 `WHISPER_DEVICE=auto` 时，程序会自动检测是否有 CUDA：
+- 有 CUDA -> 使用 `cuda + float16`
+- 无 CUDA -> 使用 `cpu + int8`
+
+
+### SOCKS 代理依赖说明
+
+若你使用 `socks5://` 代理下载 whisper 模型，需要安装：
 
 ```bash
-curl -X POST http://127.0.0.1:8888/api/v1/audio/m4a-to-wav \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "input_path": "/data/input/audio.m4a",
-    "output_path": "/data/input/audio.wav"
-  }'
+pip install socksio
 ```
 
-然后通过任务接口轮询状态：
+否则 `httpx` 会报错：`Using SOCKS proxy, but the socksio package is not installed.`
 
-```bash
-curl "http://127.0.0.1:8888/api/v1/task?task_id=task_xxx"
-```
 
-> 该接口内部使用 FFmpeg C API 完成解码/重采样/编码，不依赖 shell 命令调用。
+## 翻译策略
 
-### 4.2) 提交 ass 字幕嵌入 mp4 任务（异步，FFmpeg C API）
-
-```bash
-curl -X POST http://127.0.0.1:8888/api/v1/subtitle/ass-to-mp4 \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "video_path": "/data/input/video.mp4",
-    "subtitle_path": "/data/input/subtitle.ass",
-    "output_path": "/data/output/video.with_sub.mp4"
-  }'
-```
-
-然后通过任务接口轮询状态：
-
-```bash
-curl "http://127.0.0.1:8888/api/v1/task?task_id=task_xxx"
-```
-
-### 4.3) 提交 音频+视频+ASS 一次性合并任务（异步，FFmpeg C API）
-
-```bash
-curl -X POST http://127.0.0.1:8888/api/v1/compose \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "video_path": "/data/input/video.mp4",
-    "audio_path": "/data/input/audio.m4a",
-    "subtitle_path": "/data/input/subtitle.ass",
-    "output_path": "/data/output/final.with_sub.mp4"
-  }'
-```
-
-然后通过任务接口轮询状态：
-
-```bash
-curl "http://127.0.0.1:8888/api/v1/task?task_id=task_xxx"
-```
-
-### 5) 查询任务状态
-
-```bash
-curl "http://127.0.0.1:8888/api/v1/task?task_id=task_xxx"
-```
-
-### 5.2) 一键端到端自测脚本
-
-仓库内置 `scripts/e2e_local.sh`，默认会按下面顺序执行：
-
-1. `docker compose up --build -d`
-2. `GET /healthz`
-3. `POST /api/v1/merge` + 轮询 `GET /api/v1/task`
-4. `ffmpeg` 转 wav（16k/mono）
-5. `POST /api/v1/asr` + 轮询 `GET /api/v1/task`
-6. 校验 `/data/output/out.mp4` 与 `/data/output/audio.en.srt`
-
-运行方式：
-
-```bash
-bash scripts/e2e_local.sh
-```
-
-可选变量（按需覆盖）：`BASE_URL`、`MODEL_NAME`、`LANGUAGE`、`MAX_RETRIES`、`SLEEP_SECONDS`。
-
-
-
-### 5.3) 最终合成异步测试（定位“只有声音没有画面”）
-
-可使用脚本直接提交 `compose` 任务并轮询，然后用 `ffprobe` 校验输出是否同时包含音视频流：
-
-```bash
-python scripts/test_async_compose.py \
-  --base-url http://127.0.0.1:8888/api/v1 \
-  --video-path /data/input/video.mp4 \
-  --audio-path /data/input/audio.m4a \
-  --subtitle-path /data/input/subtitle.ass \
-  --output-path /data/output/final.with_sub.mp4
-```
-
-如果脚本报错 `invalid output streams`，说明最终文件流异常（会打印实际流类型），可据此快速定位是输入流问题还是服务端复用/编码问题。
-
-### 5.1) 音频识别生成字幕（whisper.cpp C API）
-
-先把输入音频转成 WAV（`pcm_s16le`, mono, 16kHz）：
-
-```bash
-ffmpeg -y -i data/input/audio.m4a -ar 16000 -ac 1 -c:a pcm_s16le data/input/audio.wav
-```
-
-然后提交识别任务：
-
-```bash
-curl -X POST http://127.0.0.1:8888/api/v1/asr \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "audio_path": "/data/input/audio.wav",
-    "subtitle_path": "/data/output/audio.en.srt",
-    "model_dir": "/models/whisper",
-    "model_name": "ggml-base.en.bin",
-    "language": "en"
-  }'
-```
-
-> 当前 ASR 模块直接走 whisper.cpp C API。音频输入要求 WAV (`pcm_s16le`, mono, 16kHz)。
-
-
----
-
-### 6) 一键更新（含健康检查与自动回滚）
-
-
-### 6.1) 自动更新 av-service Docker 镜像
-
-```bash
-chmod +x scripts/update_av_service_image.sh
-AV_SERVICE_IMAGE=ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest \
-  ./scripts/update_av_service_image.sh
-```
-
-该脚本会自动执行：`docker pull` -> `docker compose up -d` -> 健康检查。
-
-
-```bash
-chmod +x scripts/deploy_update.sh scripts/rollback_last.sh
-LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) ./scripts/deploy_update.sh
-```
-
-可选环境变量：
-
-- `SERVICE_NAME`（默认 `av-service`）
-- `LOCAL_UID` / `LOCAL_GID`（默认当前用户 uid/gid）
-- `HEALTH_URL`（默认 `http://127.0.0.1:8888/healthz`）
-- `MAX_RETRIES`（默认 `30`）
-- `SLEEP_SECONDS`（默认 `2`）
-
-如果需要手工回滚到某个镜像版本：
-
-```bash
-./scripts/rollback_last.sh ghcr.io/cipfz/youtobe-workflow/av-service:sha-<commit>
-```
-
-
-
-## Docker 镜像自动构建并发布（推荐）
-
-我已经新增 GitHub Actions：`.github/workflows/docker-av-service.yml`，会在 `main` 分支 push 后自动构建并发布镜像到 **GHCR**（GitHub Container Registry）。
-
-镜像地址：
-
-- `ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest`
-- `ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:sha-<commit>`
-
-> 该工作流**仅在仓库 Secrets 配置 `GHCR_TOKEN`**（PAT，需包含 `write:packages`）时才会 push 到 GHCR；未配置时自动降级为仅 build（不 push），以避免 `permission_denied: write_package`。
-
-本地服务器更新命令：
-
-```bash
-docker login ghcr.io
-docker pull ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest
-docker rm -f av-service || true
-docker run -d --name av-service \
-  -p 8888:8888 \
-  -v $(pwd)/data/input:/data/input \
-  -v $(pwd)/data/output:/data/output \
-  -v $(pwd)/models/whisper:/models/whisper \
-  ghcr.io/<你的组织或用户名>/youtobe-workflow/av-service:latest
-```
-
-如果你更喜欢 compose，可以把 `docker-compose.yml` 的 `image` 改成上面的 GHCR 镜像，然后：
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
----
-
-## GitHub Workflow 自动构建（无需本地编译）
-
-- 工作流文件：`.github/workflows/server-ci.yml`
-- 触发方式：
-  - push 到 `main`
-  - 对 `main` 发起 PR
-  - Actions 页面手工点击 `Run workflow`
-
-工作流两个档位：
-1. `fallback`：关闭 workflow/ffmpeg 依赖，用于基础链路兜底验证。
-2. `full`：安装并编译 `sogou/workflow` + FFmpeg 开发库，构建真实可运行服务。
-
-`fallback` 的目的：
-- 防止第三方依赖源波动导致 CI 完全不可用。
-- 快速定位“代码问题”与“依赖环境问题”。
-
-`full` 档位会上传发布包：`av-service-full.tar.gz`（包含可执行文件、依赖库、`run.sh`）。
-
----
-
-## 本地（可选）
-
-如果你临时想本地验证，才需要执行：
-
-```bash
-cmake -S server -B server/build
-cmake --build server/build -j
-ctest --test-dir server/build --output-on-failure
-```
-
-> 若本机未安装 workflow/FFmpeg 开发库，项目会进入 fallback 编译模式。
+当前翻译采用 **批量翻译**（默认每批 20 条），通过“序号 + 制表符”的返回格式保证行数与顺序稳定，避免逐条翻译导致上下文残缺。
