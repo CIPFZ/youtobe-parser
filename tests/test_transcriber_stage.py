@@ -96,6 +96,24 @@ class TranscriberStageTests(unittest.TestCase):
             resolved = transcriber._resolve_whisper_model_ref(source='modelscope')
             self.assertEqual(resolved, str(local))
 
+
+    def test_auto_device_selection_cuda_and_cpu(self) -> None:
+        sys.modules['faster_whisper'] = types.SimpleNamespace(WhisperModel=_FakeWhisperModel)
+        sys.modules['app.settings'] = types.SimpleNamespace(settings=_FakeSettings())
+
+        # cuda available
+        sys.modules['ctranslate2'] = types.SimpleNamespace(get_cuda_device_count=lambda: 1)
+        import app.transcriber as transcriber
+        importlib.reload(transcriber)
+        self.assertEqual(transcriber._auto_select_device('auto'), 'cuda')
+        self.assertEqual(transcriber._auto_select_compute_type('auto', 'cuda'), 'float16')
+
+        # cuda unavailable
+        sys.modules['ctranslate2'] = types.SimpleNamespace(get_cuda_device_count=lambda: 0)
+        importlib.reload(transcriber)
+        self.assertEqual(transcriber._auto_select_device('auto'), 'cpu')
+        self.assertEqual(transcriber._auto_select_compute_type('auto', 'cpu'), 'int8')
+
     def test_apply_download_proxy_env(self) -> None:
         sys.modules['faster_whisper'] = types.SimpleNamespace(WhisperModel=_FakeWhisperModel)
         sys.modules['app.settings'] = types.SimpleNamespace(settings=_FakeSettings())

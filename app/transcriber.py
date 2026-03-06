@@ -21,6 +21,31 @@ def _apply_download_proxy_env(proxy_url: str) -> None:
     logger.info('Applied whisper download proxy via env: %s', proxy_url)
 
 
+def _auto_select_device(requested_device: str) -> str:
+    device = requested_device.strip().lower()
+    if device != 'auto':
+        return device
+    try:
+        import ctranslate2
+
+        cuda_count = ctranslate2.get_cuda_device_count()
+        chosen = 'cuda' if cuda_count > 0 else 'cpu'
+        logger.info('Auto-selected whisper device: %s (cuda_count=%s)', chosen, cuda_count)
+        return chosen
+    except Exception as exc:
+        logger.warning('Failed to detect CUDA device count, fallback to cpu. err=%s', exc)
+        return 'cpu'
+
+
+def _auto_select_compute_type(requested_compute_type: str, device: str) -> str:
+    compute_type = requested_compute_type.strip().lower()
+    if compute_type != 'auto':
+        return compute_type
+    chosen = 'float16' if device == 'cuda' else 'int8'
+    logger.info('Auto-selected whisper compute_type: %s for device=%s', chosen, device)
+    return chosen
+
+
 def _resolve_whisper_model_ref(source: str | None = None) -> str:
     """Resolve faster-whisper model ref/path based on configured source."""
     source = (source or settings.whisper_model_source).strip().lower()
@@ -62,19 +87,21 @@ class FastWhisperTranscriber:
         _apply_download_proxy_env(settings.whisper_download_proxy.strip())
 
         resolved_model = _resolve_whisper_model_ref(source=source)
+        resolved_device = _auto_select_device(settings.whisper_device)
+        resolved_compute_type = _auto_select_compute_type(settings.whisper_compute_type, resolved_device)
         logger.info(
             'Loading faster-whisper model. source=%s model_ref=%s resolved=%s device=%s compute_type=%s',
             settings.whisper_model_source,
             settings.whisper_model,
             resolved_model,
-            settings.whisper_device,
-            settings.whisper_compute_type,
+            resolved_device,
+            resolved_compute_type,
         )
         try:
             self.model = WhisperModel(
                 resolved_model,
-                device=settings.whisper_device,
-                compute_type=settings.whisper_compute_type,
+                device=resolved_device,
+                compute_type=resolved_compute_type,
             )
         except Exception as exc:
             if (
@@ -86,8 +113,8 @@ class FastWhisperTranscriber:
                 ms_model = _resolve_whisper_model_ref(source='modelscope')
                 self.model = WhisperModel(
                     ms_model,
-                    device=settings.whisper_device,
-                    compute_type=settings.whisper_compute_type,
+                    device=resolved_device,
+                    compute_type=resolved_compute_type,
                 )
                 logger.info('Loaded whisper model from ModelScope fallback. path=%s', ms_model)
             else:

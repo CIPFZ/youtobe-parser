@@ -33,7 +33,7 @@ pip install -e .
 - `WHISPER_MODEL_CACHE_DIR`（模型下载缓存目录，默认 `runtime/models`）
 - `WHISPER_DOWNLOAD_PROXY`（Whisper 模型下载代理）
 - `WHISPER_MODEL_FALLBACK_TO_MODELSCOPE`（默认 `true`，HF 失败时自动回退）
-- `WHISPER_DEVICE`（默认 `auto`，GPU 推荐 `cuda`）
+- `WHISPER_DEVICE`（默认 `auto`，会自动选择 GPU/CPU；可强制为 `cuda` 或 `cpu`）
 - `WHISPER_COMPUTE_TYPE`（默认 `auto`）
 - `WHISPER_LANGUAGE`（默认 `en`）
 - `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`
@@ -133,6 +133,9 @@ LOG_FILE=runtime/logs/pipeline.log
 
 这样可以保证主流程（单视频→单字幕→单输出）稳定可控。后续如果你要“整合集批处理”，我们可以再扩展 `all` 模式。
 
+当前默认策略是 `PLAYLIST_STRATEGY=first`：
+- 自动归一化为 `https://www.youtube.com/watch?v=DFdh8BrzJ_Y`
+- 只处理当前视频（不整单播放列表）
 
 ## Whisper 模型下载源
 
@@ -176,3 +179,18 @@ WHISPER_MODELSCOPE_REPO=你的模型仓库ID
 - 文件名使用 `video_id`（例如 `abc123.mp4`、`abc123.m4a`），避免超长标题带来的路径问题。
 - 视频优先下载 `bestvideo[ext=mp4]`，音频优先下载 `bestaudio[ext=m4a]`。
 - 若目标扩展不可用，会自动回退到该视频 ID 的可用格式并记录 warning 日志。
+
+
+## 预下载 fast-whisper 模型
+
+在正式跑主流程前，可以先执行：
+
+```bash
+python tests/download_fast_whisper_model.py
+```
+
+该脚本会按 `.env` 里的 `WHISPER_MODEL_SOURCE` / `WHISPER_MODELSCOPE_REPO` / `WHISPER_DOWNLOAD_PROXY` 进行模型准备。
+
+同时当 `WHISPER_DEVICE=auto` 时，程序会自动检测是否有 CUDA：
+- 有 CUDA -> 使用 `cuda + float16`
+- 无 CUDA -> 使用 `cpu + int8`
