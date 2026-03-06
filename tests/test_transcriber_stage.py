@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib
 import sys
+import tempfile
 import types
 import unittest
+from pathlib import Path
 
 
 class _Seg:
@@ -25,6 +27,9 @@ class _FakeWhisperModel:
 
 class _FakeSettings:
     whisper_model = 'base'
+    whisper_model_source = 'huggingface'
+    whisper_modelscope_repo = ''
+    whisper_model_cache_dir = Path('/tmp/runtime-models')
     whisper_device = 'cpu'
     whisper_compute_type = 'int8'
     whisper_language = 'en'
@@ -42,6 +47,51 @@ class TranscriberStageTests(unittest.TestCase):
 
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].text, 'hello')
+
+    def test_modelscope_download_flow(self) -> None:
+        class _MsSettings(_FakeSettings):
+            whisper_model_source = 'modelscope'
+            whisper_modelscope_repo = 'demo/repo'
+
+        calls: dict[str, str] = {}
+
+        def _fake_snapshot_download(repo_id: str, cache_dir: str):
+            calls['repo_id'] = repo_id
+            calls['cache_dir'] = cache_dir
+            return '/tmp/ms_model'
+
+        fake_ms_mod = types.SimpleNamespace(snapshot_download=_fake_snapshot_download)
+        sys.modules['faster_whisper'] = types.SimpleNamespace(WhisperModel=_FakeWhisperModel)
+        sys.modules['app.settings'] = types.SimpleNamespace(settings=_MsSettings())
+        sys.modules['modelscope'] = types.SimpleNamespace()
+        sys.modules['modelscope.hub'] = types.SimpleNamespace()
+        sys.modules['modelscope.hub.snapshot_download'] = fake_ms_mod
+
+        import app.transcriber as transcriber
+        importlib.reload(transcriber)
+
+        resolved = transcriber._resolve_whisper_model_ref()
+        self.assertEqual(resolved, '/tmp/ms_model')
+        self.assertEqual(calls['repo_id'], 'demo/repo')
+
+    def test_local_model_path_has_priority(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            local = Path(td) / 'model-dir'
+            local.mkdir(parents=True, exist_ok=True)
+
+            class _LocalSettings(_FakeSettings):
+                whisper_model = str(local)
+                whisper_model_source = 'modelscope'
+                whisper_modelscope_repo = 'demo/repo'
+
+            sys.modules['faster_whisper'] = types.SimpleNamespace(WhisperModel=_FakeWhisperModel)
+            sys.modules['app.settings'] = types.SimpleNamespace(settings=_LocalSettings())
+
+            import app.transcriber as transcriber
+            importlib.reload(transcriber)
+
+            resolved = transcriber._resolve_whisper_model_ref()
+            self.assertEqual(resolved, str(local))
 
 
 if __name__ == '__main__':

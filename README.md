@@ -28,6 +28,9 @@ pip install -e .
 复制 `.env.example` 到 `.env` 后按需修改：
 
 - `WHISPER_MODEL`（默认 `large-v3`）
+- `WHISPER_MODEL_SOURCE`（`huggingface` 或 `modelscope`，默认 `huggingface`）
+- `WHISPER_MODELSCOPE_REPO`（当 source=modelscope 时必填）
+- `WHISPER_MODEL_CACHE_DIR`（模型下载缓存目录，默认 `runtime/models`）
 - `WHISPER_DEVICE`（默认 `auto`，GPU 推荐 `cuda`）
 - `WHISPER_COMPUTE_TYPE`（默认 `auto`）
 - `WHISPER_LANGUAGE`（默认 `en`）
@@ -101,6 +104,11 @@ python -m unittest discover -s tests -v
 
 说明：测试已覆盖下载、转写、翻译、字幕生成、ffmpeg 调用和整条 Pipeline 编排（通过 mock 进行端到端流程验证）。
 
+- `runtime/downloads/`：下载的音视频
+- `runtime/subtitles/*.srt`：识别字幕
+- `runtime/subtitles/*.ass`：翻译后 ASS
+- `runtime/output/*.mp4`：最终成片
+- `runtime/metadata/*.video_info.json`：视频解析基础信息
 
 ## 日志
 
@@ -127,3 +135,20 @@ LOG_FILE=runtime/logs/pipeline.log
 - 只处理当前视频（不整单播放列表）
 
 这样可以保证主流程（单视频→单字幕→单输出）稳定可控。后续如果你要“整合集批处理”，我们可以再扩展 `all` 模式。
+
+
+## Whisper 模型下载源
+
+默认使用 HuggingFace（`WHISPER_MODEL_SOURCE=huggingface`）。
+
+如果 HuggingFace 网络不稳定，可以切换到 ModelScope：
+
+```env
+WHISPER_MODEL_SOURCE=modelscope
+WHISPER_MODELSCOPE_REPO=你的模型仓库ID
+WHISPER_MODEL_CACHE_DIR=runtime/models
+```
+
+说明：
+- `modelscope` 会先把模型下载到本地缓存目录，再由 `faster-whisper` 从本地路径加载。
+- 如果你直接把 `WHISPER_MODEL` 设成本地目录路径，则优先使用本地模型路径。
