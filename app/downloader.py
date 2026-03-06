@@ -37,9 +37,7 @@ def _build_video_metadata(info: dict[str, Any], source_url: str, normalized_url:
     }
 
 
-def _ytdlp_opts(out_dir: Path, stream_kind: str, cookie_file: str, proxy_url: str) -> dict[str, Any]:
-    ext = 'mp4' if stream_kind == 'video' else 'm4a'
-    selector = settings.ytdlp_video_format if stream_kind == 'video' else settings.ytdlp_audio_format
+def _ytdlp_opts(out_dir: Path, selector: str, cookie_file: str, proxy_url: str) -> dict[str, Any]:
     opts: dict[str, Any] = {
         'quiet': False,
         'noplaylist': True,
@@ -53,10 +51,51 @@ def _ytdlp_opts(out_dir: Path, stream_kind: str, cookie_file: str, proxy_url: st
     return opts
 
 
+def _selector_candidates(stream_kind: str) -> list[str]:
+    primary = settings.ytdlp_video_format if stream_kind == 'video' else settings.ytdlp_audio_format
+    if stream_kind == 'video':
+        fallback = ['bestvideo/best', 'best']
+    else:
+        fallback = ['bestaudio/best', 'best']
+
+    candidates: list[str] = []
+    for sel in [primary, *fallback]:
+        if sel and sel not in candidates:
+            candidates.append(sel)
+    return candidates
+
+
 def _download_stream(normalized_url: str, out_dir: Path, stream_kind: str, cookie_file: str, proxy_url: str) -> tuple[dict[str, Any], Path]:
-    opts = _ytdlp_opts(out_dir=out_dir, stream_kind=stream_kind, cookie_file=cookie_file, proxy_url=proxy_url)
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(normalized_url, download=True)
+    last_exc: Exception | None = None
+    info: dict[str, Any] | None = None
+    selector_used = ''
+
+    for selector in _selector_candidates(stream_kind):
+        selector_used = selector
+        opts = _ytdlp_opts(out_dir=out_dir, selector=selector, cookie_file=cookie_file, proxy_url=proxy_url)
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(normalized_url, download=True)
+            break
+        except Exception as exc:
+            last_exc = exc
+            message = str(exc)
+            unavailable = 'Requested format is not available' in message
+            logger.warning(
+                'yt-dlp %s download failed with selector=%s. unavailable=%s err=%s',
+                stream_kind,
+                selector,
+                unavailable,
+                message,
+            )
+            if unavailable:
+                continue
+            raise
+
+    if info is None:
+        raise RuntimeError(
+            f'Failed to download {stream_kind}. tried selectors={_selector_candidates(stream_kind)}'
+        ) from last_exc
 
     video_id = info.get('id')
     if not video_id:
@@ -70,7 +109,9 @@ def _download_stream(normalized_url: str, out_dir: Path, stream_kind: str, cooki
     # fallback for edge cases where preferred ext is unavailable
     fallback = sorted(out_dir.glob(f'{video_id}.*'))
     if not fallback:
-        raise RuntimeError(f'Cannot find downloaded {stream_kind} file for id={video_id}')
+        raise RuntimeError(
+            f'Cannot find downloaded {stream_kind} file for id={video_id}, selector={selector_used}'
+        )
     logger.warning('Preferred %s extension %s not found, fallback=%s', stream_kind, ext, fallback[0])
     return info, fallback[0]
 
