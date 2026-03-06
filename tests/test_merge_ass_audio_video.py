@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-"""Integration smoke test: merge ass + audio + video into final mp4.
+"""Real integration test: merge ASS + audio + video into final mp4.
 
-This script generates synthetic input video/audio and a small ASS subtitle,
-then runs app.ffmpeg_tools.merge_av_with_ass and validates output streams.
+Usage examples:
+  python -m tests.test_merge_ass_audio_video
+  python -m tests.test_merge_ass_audio_video -- --video ./in.mp4 --audio ./in.m4a --ass ./sub.ass --out ./merged.mp4
 """
 
+import argparse
 import subprocess
 import tempfile
 from pathlib import Path
@@ -48,49 +50,56 @@ def _assert_has_av_streams(path: Path) -> None:
         raise RuntimeError(f'output does not contain both audio and video streams:\n{report}')
 
 
+def _build_synthetic_inputs(work_dir: Path) -> tuple[Path, Path, Path, Path]:
+    video = work_dir / 'video.mp4'
+    audio = work_dir / 'audio.m4a'
+    ass = work_dir / 'subtitle.ass'
+    out = work_dir / 'merged.mp4'
+
+    run_ffmpeg(['-f', 'lavfi', '-i', 'testsrc=size=1280x720:rate=30', '-t', '3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(video)])
+    run_ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=1000:sample_rate=44100', '-t', '3', '-c:a', 'aac', '-b:a', '128k', str(audio)])
+    _write_ass(ass)
+    return video, audio, ass, out
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Real ASS + video + audio merge test')
+    parser.add_argument('--video', type=Path, help='input video file path')
+    parser.add_argument('--audio', type=Path, help='input audio file path')
+    parser.add_argument('--ass', type=Path, help='input ASS subtitle file path')
+    parser.add_argument('--out', type=Path, help='output mp4 file path')
+    return parser.parse_args()
+
+
 def main() -> int:
     setup_logging(settings.log_level, settings.log_file)
+    args = parse_args()
 
-    with tempfile.TemporaryDirectory(prefix='merge-test-') as td:
-        root = Path(td)
-        video = root / 'video.mp4'
-        audio = root / 'audio.m4a'
-        ass = root / 'subtitle.ass'
-        out = root / 'merged.mp4'
+    provided = [args.video, args.audio, args.ass]
+    if any(provided) and not all(provided):
+        raise ValueError('--video/--audio/--ass must be provided together')
 
-        # synthetic video input
-        run_ffmpeg(
-            [
-                '-f', 'lavfi',
-                '-i', 'testsrc=size=1280x720:rate=30',
-                '-t', '3',
-                '-c:v', 'libx264',
-                '-pix_fmt', 'yuv420p',
-                str(video),
-            ]
-        )
+    if all(provided):
+        video = args.video.resolve()
+        audio = args.audio.resolve()
+        ass = args.ass.resolve()
+        out = (args.out or (video.parent / 'merged.mp4')).resolve()
+    else:
+        with tempfile.TemporaryDirectory(prefix='merge-test-') as td:
+            video, audio, ass, out = _build_synthetic_inputs(Path(td))
+            merge_av_with_ass(video=video, audio=audio, ass=ass, out=out)
+            if not out.exists() or out.stat().st_size == 0:
+                raise RuntimeError('merged output not generated')
+            _assert_has_av_streams(out)
+            print(f'[OK] merged output: {out}')
+            return 0
 
-        # synthetic audio input
-        run_ffmpeg(
-            [
-                '-f', 'lavfi',
-                '-i', 'sine=frequency=1000:sample_rate=44100',
-                '-t', '3',
-                '-c:a', 'aac',
-                '-b:a', '128k',
-                str(audio),
-            ]
-        )
-
-        _write_ass(ass)
-        merge_av_with_ass(video=video, audio=audio, ass=ass, out=out)
-
-        if not out.exists() or out.stat().st_size == 0:
-            raise RuntimeError('merged output not generated')
-
-        _assert_has_av_streams(out)
-        print(f'[OK] merged output: {out}')
-        return 0
+    merge_av_with_ass(video=video, audio=audio, ass=ass, out=out)
+    if not out.exists() or out.stat().st_size == 0:
+        raise RuntimeError('merged output not generated')
+    _assert_has_av_streams(out)
+    print(f'[OK] merged output: {out}')
+    return 0
 
 
 if __name__ == '__main__':

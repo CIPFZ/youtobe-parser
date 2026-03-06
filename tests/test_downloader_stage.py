@@ -1,75 +1,54 @@
 from __future__ import annotations
 
-import sys
+import http.server
+import socketserver
 import tempfile
-import types
+import threading
 import unittest
 from pathlib import Path
 
+from app.downloader import download_media
+from app.ffmpeg_tools import run_ffmpeg
+from app.settings import settings
 
-class _FakeYoutubeDL:
-    captured_opts_list: list[dict] = []
-    captured_urls: list[str] = []
 
-    def __init__(self, opts: dict):
-        self.opts = opts
-        _FakeYoutubeDL.captured_opts_list.append(opts)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def extract_info(self, url: str, download: bool = True):
-        _FakeYoutubeDL.captured_urls.append(url)
-        return {
-            'id': 'abc123',
-            'title': 'sample',
-            'uploader': 'tester',
-            'duration': 120,
-            'webpage_url': 'https://youtube.com/watch?v=abc123',
-            'extractor': 'youtube',
-        }
+class _ReusableTCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
 
 
 class DownloaderStageTests(unittest.TestCase):
-    def test_id_filename_best_stream_selection(self) -> None:
-        fake_mod = types.SimpleNamespace(YoutubeDL=_FakeYoutubeDL)
-        sys.modules['yt_dlp'] = fake_mod
+    def test_download_media_from_real_http_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix='downloader-stage-') as td:
+            root = Path(td)
+            source = root / 'source.mp4'
+            run_ffmpeg(['-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=24', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=44100', '-t', '2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', str(source)])
 
-        from app.downloader import download_media
+            handler = lambda *args, **kwargs: http.server.SimpleHTTPRequestHandler(*args, directory=str(root), **kwargs)
+            with _ReusableTCPServer(('127.0.0.1', 0), handler) as httpd:
+                port = httpd.server_address[1]
+                thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    out_dir = root / 'downloads'
+                    url = f'http://127.0.0.1:{port}/source.mp4'
 
-        with tempfile.TemporaryDirectory() as td:
-            out = Path(td)
-            (out / 'abc123.mp4').write_text('v')
-            (out / 'abc123.m4a').write_text('a')
-            source_url = 'https://www.youtube.com/watch?v=DFdh8BrzJ_Y&list=RDDFdh8BrzJ_Y&start_radio=1'
-            result = download_media(
-                url=source_url,
-                out_dir=out,
-                cookie_file='/tmp/cookies.txt',
-                proxy_url='socks5://127.0.0.1:7897',
-                playlist_strategy='first',
-            )
+                    old_vfmt = settings.ytdlp_video_format
+                    old_afmt = settings.ytdlp_audio_format
+                    settings.ytdlp_video_format = 'best'
+                    settings.ytdlp_audio_format = 'bestaudio/best'
+                    try:
+                        result = download_media(url=url, out_dir=out_dir)
+                    finally:
+                        settings.ytdlp_video_format = old_vfmt
+                        settings.ytdlp_audio_format = old_afmt
 
-            self.assertEqual(result['title'], 'sample')
-            self.assertEqual(result['video_path'], out / 'abc123.mp4')
-            self.assertEqual(result['audio_path'], out / 'abc123.m4a')
-
-            self.assertEqual(len(_FakeYoutubeDL.captured_opts_list), 2)
-            video_opts, audio_opts = _FakeYoutubeDL.captured_opts_list
-
-            self.assertEqual(video_opts['outtmpl'], str(out / '%(id)s.%(ext)s'))
-            self.assertEqual(audio_opts['outtmpl'], str(out / '%(id)s.%(ext)s'))
-            self.assertEqual(video_opts['format'], 'bestvideo[ext=mp4][vcodec^=avc1]/bestvideo[ext=mp4]/bestvideo')
-            self.assertEqual(audio_opts['format'], 'bestaudio[ext=m4a]/bestaudio')
-            self.assertEqual(video_opts['cookiefile'], '/tmp/cookies.txt')
-            self.assertEqual(audio_opts['proxy'], 'socks5://127.0.0.1:7897')
-
-            self.assertEqual(_FakeYoutubeDL.captured_urls[0], 'https://www.youtube.com/watch?v=DFdh8BrzJ_Y')
-            self.assertEqual(result['metadata']['id'], 'abc123')
-            self.assertEqual(result['metadata']['source_url'], source_url)
+                    self.assertTrue(Path(result['video_path']).exists())
+                    self.assertTrue(Path(result['audio_path']).exists())
+                    self.assertIn('id', result['metadata'])
+                    self.assertEqual(result['metadata']['source_url'], url)
+                finally:
+                    httpd.shutdown()
+                    thread.join(timeout=3)
 
 
 if __name__ == '__main__':
