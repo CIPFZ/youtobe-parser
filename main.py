@@ -18,9 +18,10 @@ def main() -> None:
     logger = logging.getLogger(__name__)
     logger.info('Pipeline started for url=%s', args.url)
 
-    output = Pipeline().run(args.url)
-    logger.info('Pipeline completed. output=%s', output)
-    print(f'完成: {output}')
+    outputs = Pipeline().run(args.url)
+    logger.info('Pipeline completed. bilingual=%s dubbed=%s', outputs.bilingual_video, outputs.dubbed_video)
+    print(f'双语原声视频: {outputs.bilingual_video}')
+    print(f'中文配音视频: {outputs.dubbed_video or "未生成（已禁用）"}')
 
 
 if __name__ == '__main__':

@@ -63,14 +63,12 @@ def run_ffmpeg(args: list[str]) -> None:
     if proc.returncode == 0:
         return
 
-    # Fallback: some system ffmpeg builds (e.g., old snap packages) miss AV1 decoder.
-    # Retry with imageio-managed ffmpeg if available.
-    err = proc.stderr or ''
-    should_fallback = any(token in err for token in _AV1_DECODER_ERRORS)
-    if should_fallback and len(candidates) > 1:
+    # Fallback: retry with secondary ffmpeg (usually imageio-managed binary) when available.
+    # This handles AV1 decoder gaps and broken system/snap ffmpeg builds.
+    if len(candidates) > 1:
         fallback_bin = candidates[1]
         logger.warning(
-            'Primary ffmpeg failed due to decoder limitation, retrying with fallback binary. '
+            'Primary ffmpeg failed, retrying with fallback binary. '
             'primary=%s fallback=%s',
             first_bin,
             fallback_bin,
@@ -92,6 +90,7 @@ def merge_av_with_ass(video: Path, audio: Path, ass: Path, out: Path) -> None:
             '-vf', f'ass={ass.as_posix()}',
             '-map', '0:v:0',
             '-map', '1:a:0',
+            '-shortest',
             '-c:v', 'libx264',
             '-preset', 'veryfast',
             '-crf', '20',

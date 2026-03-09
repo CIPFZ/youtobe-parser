@@ -12,6 +12,7 @@ STAGES = [
     ('tests.test_merge_ass_audio_video', []),
     ('tests.test_transcriber_stage', []),
     ('tests.test_translator_stage', []),
+    ('tests.test_dubbing_pipeline_stage', []),
     ('tests.test_pipeline_e2e', []),
 ]
 

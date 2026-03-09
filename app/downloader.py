@@ -102,9 +102,9 @@ def _ytdlp_opts(out_dir: Path, selector: str, cookie_file: str, proxy_url: str) 
 def _selector_candidates(stream_kind: str) -> list[str]:
     primary = settings.ytdlp_video_format if stream_kind == 'video' else settings.ytdlp_audio_format
     if stream_kind == 'video':
-        fallback = ['bestvideo/best', 'best']
+        fallback = ['bestvideo[ext=mp4]']
     else:
-        fallback = ['bestaudio/best', 'best']
+        fallback = ['bestaudio[ext=m4a]']
 
     candidates: list[str] = []
     for sel in [primary, *fallback]:
@@ -154,14 +154,30 @@ def _download_stream(normalized_url: str, out_dir: Path, stream_kind: str, cooki
     if target.exists():
         return info, target
 
-    # fallback for edge cases where preferred ext is unavailable
-    fallback = sorted(out_dir.glob(f'{video_id}.*'))
-    if not fallback:
-        raise RuntimeError(
-            f'Cannot find downloaded {stream_kind} file for id={video_id}, selector={selector_used}'
-        )
-    logger.warning('Preferred %s extension %s not found, fallback=%s', stream_kind, ext, fallback[0])
-    return info, fallback[0]
+    # strict extension rule: video must be mp4, audio must be m4a
+    same_ext = sorted(out_dir.glob(f'{video_id}.{ext}'))
+    if same_ext:
+        return info, same_ext[0]
+
+    existing = _candidate_downloads(out_dir, video_id)
+    existing_str = ', '.join(str(p) for p in existing) if existing else 'none'
+    raise RuntimeError(
+        f'{stream_kind} download must be .{ext}, but no .{ext} file exists for id={video_id}. '
+        f'found={existing_str}. please adjust YTDLP format selector or source availability.'
+    )
+
+
+def _candidate_downloads(out_dir: Path, video_id: str) -> list[Path]:
+    files = sorted(out_dir.glob(f'{video_id}.*'))
+    out: list[Path] = []
+    for p in files:
+        name = p.name.lower()
+        if name.endswith('.part') or '.thumbnail.' in name:
+            continue
+        if not p.is_file():
+            continue
+        out.append(p)
+    return out
 
 
 def _thumbnail_sort_key(thumb: dict[str, Any]) -> tuple[int, int, int, int]:

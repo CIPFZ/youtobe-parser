@@ -7,6 +7,13 @@
 3. 翻译字幕并转换成 `ASS`
 4. `ASS + 音频 + 视频` 合并成最终 `MP4`
 
+独立配音流程（不影响上面 1-4）：
+
+5. 输入已存在 `MP4 + M4A + SRT + ASS`
+6. 人声分离（Demucs）
+7. 英文段落语义合并后翻译为中文并进行 TTS
+8. 依据原时间轴对齐中文语音，和伴奏混音后封装成配音版 `MP4`
+
 ## 设计目标
 
 - **高效**：全链路纯 Python，减少多服务通信开销。
@@ -37,9 +44,30 @@ pip install -e .
 - `WHISPER_DEVICE`（默认 `auto`，会自动选择 GPU/CPU；可强制为 `cuda` 或 `cpu`）
 - `WHISPER_COMPUTE_TYPE`（默认 `auto`）
 - `WHISPER_LANGUAGE`（默认 `en`）
+- `TRANSCRIBE_USE_VOCALS`（默认 `false`，为 `true` 时先做人声分离，再用 `vocals.wav` 进行 Whisper 转写）
+- `TRANSCRIBE_VOCALS_FALLBACK_TO_ORIGINAL`（默认 `true`，人声分离失败时自动回退原始音频转写）
+- `TRANSCRIBE_SEPARATION_DIRNAME`（默认 `transcribe_separated`，转写前分离产物目录）
 - `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`
 - `TARGET_LANGUAGE`（默认 `zh-CN`）
 - `TRANSLATION_BATCH_SIZE`（默认 `20`，LLM 批量翻译大小）
+- `PIPELINE_ENABLE_DUBBING`（默认 `true`，主入口是否同时产出中文配音版）
+- `DUBBING_WORK_DIRNAME`（默认 `dubbing`，配音流程产物目录）
+- `DEMUCS_COMMAND` / `DEMUCS_MODEL`（默认 `demucs` / `htdemucs_ft`）
+- `DEMUCS_DEVICE`（默认 `auto`：优先 `torch.cuda.is_available()`，其次 `nvidia-smi`，否则 `cpu`）
+- `DEMUCS_CACHE_DIR`（默认 `models/demucs`，Demucs 权重缓存固定在项目内）
+- `TTS_PROVIDER`（`openai` 或 `edge`）
+- `TTS_VOICE_GENDER`（`female` / `male`，默认 `female`，用于 edge 语音默认选择）
+- `TTS_EDGE_VOICE_FEMALE` / `TTS_EDGE_VOICE_MALE`
+- `DUBBING_PRESET`（`default` / `natural`，`natural` 会使用更大的前移窗口和更低最小语速，进一步压缩“字幕先出但没声”的空白感）
+- `DUBBING_TIMING_MODE`（`strict` / `relaxed`，建议 `relaxed`，减少“有字幕没声音”的段落空白）
+- `DUBBING_REFLOW_SUBTITLES`（默认 `true`，将中文配音字幕按中文语句重新切分与重排，不再机械跟随英文分段）
+- `DUBBING_SUBTITLE_MAX_CHARS`（默认 `20`，中文重排后单条字幕最大字数）
+- `DUBBING_SUBTITLE_MAX_DURATION_SEC`（默认 `3.6`，中文重排后单条字幕最大时长）
+- `DUBBING_SUBTITLE_MAX_GAP_SEC`（默认 `0.25`，相邻短语在此间隔内可合并成一条字幕）
+- `DUBBING_TRIM_TTS_SILENCE`（默认 `true`，裁掉每段 TTS 首尾静音，减少“有字幕但没声”）
+- `DUBBING_TTS_SILENCE_THRESHOLD` / `DUBBING_TTS_KEEP_LEAD_SEC` / `DUBBING_TTS_KEEP_TAIL_SEC`（TTS 静音裁剪阈值和保留首尾）
+- `DUBBING_PRESERVE_FULL_TEXT`（默认 `true`，不再按语速上限截断中文文本）
+- `DUBBING_DISABLE_TIME_STRETCH`（默认 `true`，不做 TTS 变速，宁可整体变慢/错位）
 - `WORK_DIR`（默认 `runtime`）
 - `OUTPUT_NAME`（默认 `final_output`）
 - `METADATA_DIRNAME`（默认 `metadata`，保存视频基础信息 JSON）
@@ -61,6 +89,50 @@ python main.py "https://www.youtube.com/watch?v=..."
 yp-run "https://www.youtube.com/watch?v=..."
 ```
 
+每日选题发现（抓取 + 评分 + 入库）：
+
+```bash
+python daily_discovery.py --dry-run
+# 或
+yp-discover --dry-run
+```
+
+Discovery 类型配置（`.env`）：
+- `DISCOVERY_TOPIC_TYPES=ai,tech,digital`：选择抓取类型，可组合
+- `DISCOVERY_TOPIC_AI_KEYWORDS` / `DISCOVERY_TOPIC_TECH_KEYWORDS` / `DISCOVERY_TOPIC_DIGITAL_KEYWORDS`：每类关键词模板
+- `DISCOVERY_KEYWORDS`：额外补充关键词（可留空）
+- `DISCOVERY_HTTP_RETRIES` / `DISCOVERY_HTTP_RETRY_BACKOFF_SEC`：YouTube API 请求重试（缓解偶发 SSL EOF）
+
+本地可视化面板（浏览 discovery 结果）：
+
+```bash
+python discovery_dashboard.py
+# 或
+yp-discovery-ui
+```
+默认地址：`http://127.0.0.1:8502`
+
+面板支持：
+- 手动刷新抓取（点击“手动刷新抓取”）
+- 单条视频触发处理（点击“触发处理”）
+- 内置后台任务队列（`pending/running/success/failed`），可查看产物路径
+
+主入口会统一产出两份视频：
+- 双语字幕原声版：`runtime/output/<id>.mp4`
+- 中文字幕配音版：`runtime/dubbing/output/<id>.dubbed.mp4`
+
+独立配音流程（可单独重跑配音阶段）：
+
+```bash
+yp-dub --video runtime/downloads/<id>.mp4 --audio runtime/downloads/<id>.m4a --srt runtime/subtitles/<id>.srt --ass runtime/subtitles/<id>.ass
+```
+
+预下载 Demucs 模型（首次建议先执行一次）：
+
+```bash
+python tests/download_demucs_model.py
+```
+
 输出目录：
 
 - `runtime/downloads/`：下载的音视频
@@ -68,6 +140,8 @@ yp-run "https://www.youtube.com/watch?v=..."
 - `runtime/subtitles/*.ass`：翻译后 ASS（按视频 `id` 命名）
 - `runtime/output/*.mp4`：最终成片（默认 `OUTPUT_NAME.mp4`）
 - `runtime/metadata/*.video_info.json`：视频解析基础信息（按视频 `id` 命名）
+- `runtime/dubbing/`：独立配音流程中间产物与最终成片
+- `runtime/discovery/discovery.db`：每日发现候选视频库（SQLite）
 
 ## 代码结构
 

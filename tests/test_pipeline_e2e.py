@@ -24,16 +24,20 @@ def main() -> int:
         print('[SKIP] pipeline e2e skipped: URL not set')
         return 0
 
-    output = Pipeline().run(url)
+    outputs = Pipeline().run(url)
+    output = outputs.bilingual_video
     if not output.exists() or output.stat().st_size <= 0:
-        raise RuntimeError('pipeline output not generated')
+        raise RuntimeError('pipeline bilingual output not generated')
+    if settings.pipeline_enable_dubbing:
+        if outputs.dubbed_video is None or not outputs.dubbed_video.exists() or outputs.dubbed_video.stat().st_size <= 0:
+            raise RuntimeError('pipeline dubbed output not generated')
 
     metadata_dir = settings.work_dir.resolve() / settings.metadata_dirname
     files = list(metadata_dir.glob('*.video_info.json'))
     if not files:
         raise RuntimeError('metadata json not generated')
 
-    print(f'[OK] pipeline e2e completed: output={output} metadata_count={len(files)}')
+    print(f'[OK] pipeline e2e completed: bilingual={output} dubbed={outputs.dubbed_video} metadata_count={len(files)}')
     return 0
 
 

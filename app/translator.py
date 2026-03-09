@@ -11,15 +11,16 @@ logger = logging.getLogger(__name__)
 
 
 class SubtitleTranslator:
-    def __init__(self) -> None:
+    def __init__(self, target_language: str | None = None) -> None:
         self.enabled = bool(settings.openai_api_key)
+        self.target_language = (target_language or settings.target_language).strip()
         self.client = (
             OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url.rstrip('/'))
             if self.enabled
             else None
         )
         if self.enabled:
-            logger.info('Translator enabled. model=%s target_language=%s batch_size=%s', settings.openai_model, settings.target_language, settings.translation_batch_size)
+            logger.info('Translator enabled. model=%s target_language=%s batch_size=%s', settings.openai_model, self.target_language, settings.translation_batch_size)
         else:
             logger.warning('Translator disabled because OPENAI_API_KEY is empty. subtitles will keep original text.')
 
@@ -56,7 +57,7 @@ class SubtitleTranslator:
             model=settings.openai_model,
             temperature=0.2,
             messages=[
-                {'role': 'system', 'content': f'You are a subtitle translator. Translate to {settings.target_language} only.'},
+                {'role': 'system', 'content': f'You are a subtitle translator. Translate to {self.target_language} only.'},
                 {'role': 'user', 'content': self._render_batch_prompt(texts)},
             ],
         )

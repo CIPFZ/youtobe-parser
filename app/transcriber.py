@@ -128,6 +128,16 @@ class FastWhisperTranscriber:
                 compute_type=resolved_compute_type,
             )
         except Exception as exc:
+            msg = str(exc).lower()
+            if resolved_device == 'cuda' and ('out of memory' in msg or 'cuda failed' in msg):
+                logger.warning('Whisper CUDA load OOM, fallback to cpu/int8. err=%s', exc)
+                self.model = WhisperModel(
+                    resolved_model,
+                    device='cpu',
+                    compute_type='int8',
+                )
+                logger.info('Loaded whisper model with CPU fallback after CUDA OOM.')
+                return
             if (
                 source == 'huggingface'
                 and settings.whisper_model_fallback_to_modelscope
